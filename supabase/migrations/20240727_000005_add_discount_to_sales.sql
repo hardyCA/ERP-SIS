@@ -1,0 +1,1 @@
+ALTER TABLE sales ADD COLUMN discount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (discount >= 0);
