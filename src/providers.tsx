@@ -5,16 +5,19 @@ import { useState } from 'react'
 import { Toaster } from 'sonner'
 import { BranchProvider } from '@/shared/contexts/branch-context'
 
+const isDev = process.env.NODE_ENV === 'development'
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30 * 1000,
-            gcTime: 5 * 60 * 1000,
+            staleTime: isDev ? 0 : 30 * 1000,
+            gcTime: isDev ? 0 : 5 * 60 * 1000,
             retry: 1,
-            refetchOnWindowFocus: false,
+            refetchOnWindowFocus: true,
+            refetchOnMount: true,
           },
           mutations: {
             retry: 0,

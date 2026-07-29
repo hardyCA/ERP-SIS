@@ -1,9 +1,11 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { getPurchaseById } from '../actions'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { getPurchaseById, approvePurchase, cancelPurchase } from '../actions'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import {
   Table,
@@ -13,7 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { Package, Printer, FileDown } from 'lucide-react'
+import { useShowCost } from '@/shared/lib/use-role'
+import { Package, Printer, FileDown, Truck, CheckCircle, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import Image from 'next/image'
 import { exportPurchasePdf, printElement } from '@/shared/lib/export'
 
@@ -22,6 +26,10 @@ interface PurchaseDetailProps {
 }
 
 export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
+  const queryClient = useQueryClient()
+  const [actionLoading, setActionLoading] = useState<'approve' | 'cancel' | null>(null)
+  const showCost = useShowCost()
+
   const { data: result, isLoading } = useQuery({
     queryKey: ['purchase', purchaseId],
     queryFn: () => getPurchaseById(purchaseId),
@@ -51,19 +59,71 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
     products: { name: string; image_url: string | null } | null
   }>
 
+  const purchaseData = purchase as Record<string, unknown>
+  const expenses = (purchaseData.expenses ?? []) as Array<{ id: string; description: string; cost: number }>
+
+  const handleApprove = async () => {
+    setActionLoading('approve')
+    const res = await approvePurchase(purchaseId)
+    setActionLoading(null)
+    if (res.success) {
+      toast.success('Compra aprobada exitosamente')
+      queryClient.invalidateQueries({ queryKey: ['purchase', purchaseId] })
+      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  const handleCancel = async () => {
+    setActionLoading('cancel')
+    const res = await cancelPurchase(purchaseId)
+    setActionLoading(null)
+    if (res.success) {
+      toast.success('Compra cancelada')
+      queryClient.invalidateQueries({ queryKey: ['purchase', purchaseId] })
+      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-amber-50 text-amber-700 border-amber-200',
+    approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    cancelled: 'bg-red-50 text-red-700 border-red-200',
+  }
+
   return (
     <div id="purchase-detail" className="space-y-6">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <CardTitle>Compra #{purchase.number?.toString().padStart(4, '0') ?? '—'}</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle>Compra #{purchase.number?.toString().padStart(4, '0') ?? '—'}</CardTitle>
+              <Badge variant="outline" className={`text-[11px] ${statusColors[purchase.status] ?? ''}`}>
+                {purchase.status === 'pending' ? 'Pendiente' : purchase.status === 'approved' ? 'Aprobado' : 'Cancelado'}
+              </Badge>
+            </div>
             <div className="flex items-center gap-2">
+              {purchase.status === 'pending' && (
+                <>
+                  <Button variant="default" size="sm" className="h-7 text-[11px]"
+                    onClick={handleApprove} disabled={actionLoading === 'approve'}>
+                    <CheckCircle className="h-3 w-3 mr-1" /> {actionLoading === 'approve' ? 'Aprobando...' : 'Aprobar'}
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-[11px] text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={handleCancel} disabled={actionLoading === 'cancel'}>
+                    <XCircle className="h-3 w-3 mr-1" /> {actionLoading === 'cancel' ? 'Cancelando...' : 'Cancelar'}
+                  </Button>
+                </>
+              )}
               <Button variant="outline" size="sm" className="h-7 text-[11px]"
                 onClick={() => printElement('purchase-detail')}>
                 <Printer className="h-3 w-3 mr-1" /> Imprimir
               </Button>
               <Button variant="outline" size="sm" className="h-7 text-[11px]"
-                onClick={() => {
+                  onClick={() => {
                   const number = purchase.number?.toString().padStart(4, '0') ?? '—'
                   const branchesData = purchase.branches as Record<string, unknown> | undefined
                   exportPurchasePdf({
@@ -81,7 +141,7 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
                       unit_cost: Number(i.unit_cost),
                       subtotal: Number(i.subtotal),
                     })),
-                  })
+                  }, showCost)
                 }}>
                 <FileDown className="h-3 w-3 mr-1" /> PDF
               </Button>
@@ -93,6 +153,15 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
             <span className="text-muted-foreground">Sucursal</span>
             <span className="font-medium">{purchase.branches?.name ?? '—'}</span>
           </div>
+          {(() => {
+            const s = purchaseData.suppliers as Record<string, unknown> | undefined
+            return s?.name ? (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground flex items-center gap-1"><Truck className="h-3 w-3" /> Proveedor</span>
+                <span className="font-medium">{s.name as string}{s.document_id ? ` (ID: ${s.document_id as string})` : ''}</span>
+              </div>
+            ) : null
+          })()}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Responsable</span>
             <span className="font-medium">{purchase.created_by_name ?? '—'}</span>
@@ -126,8 +195,8 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
                   <TableHead />
                   <TableHead>Producto</TableHead>
                   <TableHead>Cantidad</TableHead>
-                  <TableHead>Costo Unit.</TableHead>
-                  <TableHead>Subtotal</TableHead>
+                  {showCost && <TableHead>Costo Unit.</TableHead>}
+                  {showCost && <TableHead>Subtotal</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -142,8 +211,8 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
                     </TableCell>
                     <TableCell className="font-medium">{item.products?.name ?? '—'}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
-                    <TableCell>Bs {Number(item.unit_cost).toFixed(2)}</TableCell>
-                    <TableCell>Bs {Number(item.subtotal).toFixed(2)}</TableCell>
+                    {showCost && <TableCell>Bs {Number(item.unit_cost).toFixed(2)}</TableCell>}
+                    {showCost && <TableCell>Bs {Number(item.subtotal).toFixed(2)}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>
@@ -151,6 +220,34 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
           </div>
         </CardContent>
       </Card>
+
+      {showCost && expenses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Gastos Operativos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Detalle</TableHead>
+                    <TableHead className="w-32 text-right">Costo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenses.map((exp) => (
+                    <TableRow key={exp.id}>
+                      <TableCell className="font-medium">{exp.description}</TableCell>
+                      <TableCell className="text-right font-mono">Bs {Number(exp.cost).toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

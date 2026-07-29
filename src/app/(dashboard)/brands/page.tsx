@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { Button } from '@/shared/components/ui/button'
 import { BrandList } from '@/modules/brands/components/brand-list'
 import { BrandForm } from '@/modules/brands/components/brand-form'
@@ -26,7 +27,7 @@ export default function BrandsPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <PageHeader
         title="Catálogo"
         description="Selecciona una marca para ver sus categorías y productos"
@@ -51,6 +52,6 @@ export default function BrandsPage() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

@@ -6,6 +6,7 @@ import { getPurchases } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import {
   Table,
@@ -118,20 +119,22 @@ export function PurchaseList() {
           <div className="rounded-lg border overflow-x-auto">
             <Table className="min-w-[640px]">
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">#</TableHead>
-                  <TableHead>Sucursal</TableHead>
-                  <TableHead className="w-28">Total</TableHead>
-                  <TableHead>Responsable</TableHead>
-                  <TableHead className="max-w-32">Notas</TableHead>
-                  <TableHead className="w-28">Fecha</TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
+                  <TableRow>
+                    <TableHead className="w-16">#</TableHead>
+                    <TableHead>Sucursal</TableHead>
+                    <TableHead className="max-w-28">Proveedor</TableHead>
+                    <TableHead className="w-24">Total</TableHead>
+                    <TableHead className="w-20">Estado</TableHead>
+                    <TableHead>Responsable</TableHead>
+                    <TableHead className="max-w-32">Notas</TableHead>
+                    <TableHead className="w-28">Fecha</TableHead>
+                    <TableHead className="w-12" />
+                  </TableRow>
               </TableHeader>
               <TableBody>
                 {purchases.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       {hasFilters ? 'No hay compras en este rango de fechas' : 'No hay compras registradas'}
                     </TableCell>
                   </TableRow>
@@ -141,7 +144,17 @@ export function PurchaseList() {
                     <TableCell className="font-mono text-xs font-semibold">#{(p.number as number)?.toString().padStart(4, '0') ?? '—'}</TableCell>
                     <TableCell className="text-sm font-medium">{
                       ((p.branches as Record<string, unknown>)?.name as string) ?? '—'}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground truncate max-w-28">
+                      {((p.suppliers as Record<string, unknown> | undefined)?.name as string) ?? '—'}
+                    </TableCell>
                     <TableCell className="font-mono text-sm font-semibold text-primary">Bs {Number(p.total).toFixed(2)}</TableCell>
+                    <TableCell>{(() => {
+                      const status = p.status as string
+                      if (status === 'pending') return <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50">Pendiente</Badge>
+                      if (status === 'approved') return <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50">Aprobado</Badge>
+                      if (status === 'cancelled') return <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200 hover:bg-red-50">Cancelado</Badge>
+                      return <Badge variant="secondary" className="text-[10px]">—</Badge>
+                    })()}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{(p.created_by_name as string) ?? '—'}</TableCell>
                     <TableCell className="text-sm text-muted-foreground max-w-32 truncate">
                       {(p.notes as string) ?? '—'}

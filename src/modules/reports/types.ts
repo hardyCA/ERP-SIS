@@ -6,6 +6,10 @@ export interface DashboardStats {
   activeCreditsAmount: number
   cashBalance: number
   lowStockCount: number
+  pendingPurchases: number
+  pendingPurchaseAmount: number
+  totalPurchases: number
+  totalPurchaseAmount: number
 }
 
 export interface SalesReportItem {
@@ -64,6 +68,26 @@ export interface ProfitReportItem {
   customer_name: string | null
   created_at: string
   branches: { name: string } | null
+}
+
+export interface PurchaseReportItem {
+  id: string
+  number: number
+  total: number
+  status: string
+  supplier_name: string | null
+  branches: { name: string } | null
+  created_at: string
+  created_by_name: string | null
+}
+
+export interface PurchaseStats {
+  pendingCount: number
+  pendingAmount: number
+  approvedCount: number
+  approvedAmount: number
+  cancelledCount: number
+  cancelledAmount: number
 }
 
 export type ActionResponse<T = unknown> = {

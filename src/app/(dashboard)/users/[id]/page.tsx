@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Button } from '@/shared/components/ui/button'
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { UserPermissions } from '@/modules/users/components/user-permissions'
 import { UserDetail } from '@/modules/users/components/user-detail'
 import { getUser } from '@/modules/users/actions'
@@ -16,7 +17,7 @@ export default async function UserDetailPage({ params }: Props) {
 
   if (!result.success || !result.data) {
     return (
-      <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <PageContainer>
         <PageHeader
           title="Usuario no encontrado"
           action={
@@ -26,12 +27,12 @@ export default async function UserDetailPage({ params }: Props) {
             </Button>
           }
         />
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <PageHeader
         title={result.data.name}
         description="Administra los permisos y accesos del usuario a las sucursales"
@@ -44,6 +45,6 @@ export default async function UserDetailPage({ params }: Props) {
       />
       <UserDetail user={result.data} />
       <UserPermissions userId={id} />
-    </div>
+    </PageContainer>
   )
 }

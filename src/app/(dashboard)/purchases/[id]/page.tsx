@@ -1,4 +1,5 @@
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { PurchaseDetail } from '@/modules/purchases/components/purchase-detail'
 
 interface Props {
@@ -8,9 +9,9 @@ interface Props {
 export default async function PurchaseDetailPage({ params }: Props) {
   const { id } = await params
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <PageHeader title="Detalle de Compra" />
       <PurchaseDetail purchaseId={id} />
-    </div>
+    </PageContainer>
   )
 }

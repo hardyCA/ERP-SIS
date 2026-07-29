@@ -15,7 +15,7 @@ export function BranchSwitcher({ currentBranchId, className }: BranchSwitcherPro
   const { data: result, isLoading } = useQuery({
     queryKey: ['active-branches'],
     queryFn: getActiveBranches,
-    staleTime: 30000,
+    staleTime: 0,
   })
 
   const branches = (result?.success ? result.data : []) as Array<{ id: string; name: string }>

@@ -1,11 +1,12 @@
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { CreditsList } from '@/modules/credits/components/credits-list'
 
 export default function CreditsPage() {
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <PageHeader title="Créditos" description="Ventas a crédito y pagos" />
       <CreditsList />
-    </div>
+    </PageContainer>
   )
 }

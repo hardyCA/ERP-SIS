@@ -22,7 +22,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/shared/components/ui/dialog'
-import { Package, Plus, ShoppingCart, Check, Folder, FolderOpen, Minus, ArrowRight, Search, UserPlus, WalletMinimal, ScanQrCode, CreditCard, ArrowLeftRight } from 'lucide-react'
+import { Package, Plus, ShoppingCart, Check, Folder, FolderOpen, Minus, ArrowRight, Search, UserPlus, WalletMinimal, ScanQrCode, CreditCard, ArrowLeftRight, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/shared/lib/utils'
 
@@ -80,28 +80,28 @@ export function SaleForm() {
   const { data: brandsData } = useQuery({
     queryKey: ['brands'],
     queryFn: getBrands,
-    staleTime: 60000,
+    staleTime: 0,
   })
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories', selectedBrand],
     queryFn: () => getCategoriesByBrand(selectedBrand!),
     enabled: !!selectedBrand,
-    staleTime: 60000,
+    staleTime: 0,
   })
 
   const { data: productsData } = useQuery({
     queryKey: ['sale-products', selectedBrand, selectedCategory, branchId],
     queryFn: () => getSaleProducts(selectedBrand!, selectedCategory!, branchId || undefined),
     enabled: !!selectedBrand && !!selectedCategory,
-    staleTime: 10000,
+    staleTime: 0,
   })
 
   const { data: customerData } = useQuery({
     queryKey: ['customer-search', customerQuery],
     queryFn: () => searchCustomers(customerQuery),
     enabled: customerQuery.length >= 1,
-    staleTime: 5000,
+    staleTime: 0,
   })
 
   const brands = (brandsData?.success ? (brandsData.data ?? []) : []) as Array<{ id: string; name: string }>
@@ -206,9 +206,9 @@ export function SaleForm() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4">
-      {/* Left: Customer + Product Browser */}
-      <div className="w-full lg:flex-[6] min-w-0 space-y-2">
+    <div className="space-y-6">
+      {/* Product Browser */}
+      <div className="w-full space-y-2">
         {/* Step 1: Brand chips */}
         <div className="rounded-lg border bg-card px-3 py-2">
           <div className="flex items-center gap-2 mb-1.5">
@@ -370,314 +370,320 @@ export function SaleForm() {
         )}
       </div>
 
-      {/* Right: Cart sidebar */}
-      <div className="w-full lg:flex-[4] shrink-0">
-        <div className="lg:sticky lg:top-4">
-          <Card>
-            <div className="flex items-center justify-between px-4 pt-3 pb-2">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className={cn('h-4 w-4', items.length > 0 ? 'text-primary' : 'text-muted-foreground')} />
-                <span className="text-sm font-semibold">Carrito</span>
-              </div>
-              <Badge variant={items.length > 0 ? 'default' : 'secondary'} className="text-[10px] h-5 px-2">
-                {items.length}
-              </Badge>
+      {/* Cart Section */}
+      <Card className={cn('border-2 overflow-hidden', items.length > 0 ? 'border-primary/20' : 'border-dashed')}>
+        <CardContent className="p-4 space-y-4">
+          {/* Cart header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className={cn('h-5 w-5', items.length > 0 ? 'text-primary' : 'text-muted-foreground')} />
+              <span className="text-base font-semibold">Carrito</span>
             </div>
-            <CardContent className="px-3 pb-3 space-y-2">
-              {/* Customer section */}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Cliente (nombre o teléfono)..."
-                  value={customerQuery}
-                  onChange={(e) => setCustomerQuery(e.target.value)}
-                  className="h-8 pl-8 text-[11px]"
-                />
+            <Badge variant={items.length > 0 ? 'default' : 'secondary'} className="text-xs px-3 py-1">
+              {items.length} {items.length === 1 ? 'producto' : 'productos'}
+            </Badge>
+          </div>
+
+          {/* Customer section */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Cliente (nombre o teléfono)..."
+              value={customerQuery}
+              onChange={(e) => setCustomerQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {selectedCustomer && (
+            <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold shrink-0">
+                  {selectedCustomer.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight truncate">{selectedCustomer.name}</p>
+                  {selectedCustomer.phone && <p className="text-xs text-muted-foreground leading-tight truncate">{selectedCustomer.phone}</p>}
+                </div>
               </div>
-              {selectedCustomer && (
-                <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold shrink-0">
-                      {selectedCustomer.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium leading-tight truncate">{selectedCustomer.name}</p>
-                      {selectedCustomer.phone && <p className="text-[10px] text-muted-foreground leading-tight truncate">{selectedCustomer.phone}</p>}
-                    </div>
+              <button type="button" onClick={() => setSelectedCustomer(null)} className="text-xs text-destructive hover:underline shrink-0 ml-2">Quitar</button>
+            </div>
+          )}
+          {customerQuery && customerResults.length > 0 && !selectedCustomer && (
+            <div className="rounded-xl border divide-y max-h-32 overflow-auto">
+              {customerResults.map((c) => (
+                <button key={c.id} type="button"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-accent transition-colors"
+                  onClick={() => { setSelectedCustomer(c); setCustomerQuery('') }}
+                >
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold shrink-0">
+                    {c.name.charAt(0).toUpperCase()}
                   </div>
-                  <button type="button" onClick={() => setSelectedCustomer(null)} className="text-[10px] text-destructive hover:underline shrink-0 ml-1">Quitar</button>
-                </div>
-              )}
-              {customerQuery && customerResults.length > 0 && !selectedCustomer && (
-                <div className="rounded-md border divide-y max-h-24 overflow-auto">
-                  {customerResults.map((c) => (
-                    <button key={c.id} type="button"
-                      className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-accent transition-colors"
-                      onClick={() => { setSelectedCustomer(c); setCustomerQuery('') }}
-                    >
-                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-bold shrink-0">
-                        {c.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium leading-tight truncate">{c.name}</p>
-                        {c.phone && <p className="text-[10px] text-muted-foreground leading-tight truncate">{c.phone}</p>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {customerQuery && customerResults.length === 0 && !selectedCustomer && (
-                <Button variant="outline" size="sm" className="h-7 text-[11px] w-full"
-                  onClick={() => { setNewCustomerName(customerQuery); setShowNewCustomer(true) }}>
-                  <UserPlus className="h-3 w-3 mr-1" /> Crear &quot;{customerQuery}&quot;
-                </Button>
-              )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight truncate">{c.name}</p>
+                    {c.phone && <p className="text-xs text-muted-foreground leading-tight truncate">{c.phone}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {customerQuery && customerResults.length === 0 && !selectedCustomer && (
+            <Button variant="outline" size="sm" className="w-full"
+              onClick={() => { setNewCustomerName(customerQuery); setShowNewCustomer(true) }}>
+              <UserPlus className="h-4 w-4 mr-1.5" /> Crear &quot;{customerQuery}&quot;
+            </Button>
+          )}
 
-              <Dialog open={showNewCustomer} onOpenChange={setShowNewCustomer}>
-                <DialogContent className="sm:max-w-sm">
-                  <DialogHeader>
-                    <DialogTitle>Nuevo Cliente</DialogTitle>
-                    <DialogDescription>Registrar un nuevo cliente</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <Input placeholder="Nombre" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} className="h-8 text-[11px]" />
-                    <Input placeholder="Teléfono (opcional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} className="h-8 text-[11px]" />
-                    <Button onClick={handleCreateCustomer} className="w-full h-8 text-[11px]">Guardar Cliente</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+          <Dialog open={showNewCustomer} onOpenChange={setShowNewCustomer}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Nuevo Cliente</DialogTitle>
+                <DialogDescription>Registrar un nuevo cliente</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Input placeholder="Nombre" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+                <Input placeholder="Teléfono (opcional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+                <Button onClick={handleCreateCustomer} className="w-full">Guardar Cliente</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
-              {items.length === 0 ? (
-                <div className="text-center py-5">
-                  <ArrowRight className="h-6 w-6 text-muted-foreground/30 mx-auto mb-1" />
-                  <p className="text-[10px] text-muted-foreground">Agrega productos</p>
-                  <p className="text-[10px] text-muted-foreground/60">desde la izquierda</p>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-center gap-2 px-1 py-1 border-b bg-muted/30">
-                    <div className="flex-1 min-w-0 text-[10px] text-muted-foreground font-medium">Producto</div>
-                    <div className="w-14 shrink-0 text-[10px] text-muted-foreground font-medium text-center">Cant</div>
-                    <div className="w-14 shrink-0 text-[10px] text-muted-foreground font-medium text-right">Precio</div>
-                    <div className="w-16 shrink-0 text-[10px] text-muted-foreground font-medium text-right">Subtotal</div>
-                    <div className="w-8 shrink-0" />
-                  </div>
-                  <ScrollArea className="h-[180px] pr-1 -mr-1">
-                    <div className="divide-y">
-                      {items.map((item) => (
-                        <div key={item.product_id} className="flex items-center gap-2 py-1.5 px-1">
-                          <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                            {item.image_url ? (
-                              <Image src={item.image_url} alt={item.product_name} width={18} height={18} className="h-4 w-4 rounded object-cover shrink-0" />
-                            ) : (
-                              <div className="h-4 w-4 rounded bg-muted flex items-center justify-center shrink-0">
-                                <Package className="h-2 w-2 text-muted-foreground" />
-                              </div>
-                            )}
-                            <p className="text-[10px] font-medium truncate leading-tight">{item.product_name}</p>
-                          </div>
-                          <div className="w-14 shrink-0 flex items-center justify-center gap-0.5">
-                            <button type="button" className="h-4 w-4 rounded border flex items-center justify-center hover:bg-accent"
-                              onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
-                              <Minus className="h-2 w-2" />
-                            </button>
-                            <span className="text-[10px] font-mono w-4 text-center tabular-nums">{item.quantity}</span>
-                            <button type="button" className="h-4 w-4 rounded border flex items-center justify-center hover:bg-accent"
-                              onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
-                              <Plus className="h-2 w-2" />
-                            </button>
-                          </div>
-                          <div className="w-14 shrink-0 text-[10px] font-mono text-right text-muted-foreground">Bs {item.price.toFixed(2)}</div>
-                          <div className="w-16 shrink-0 text-[11px] font-mono font-medium text-right">Bs {(item.quantity * item.price).toFixed(2)}</div>
-                          <button type="button" className="w-8 shrink-0 text-[10px] text-destructive hover:underline text-center"
-                            onClick={() => removeItem(item.product_id)}>×</button>
+          {/* Cart items */}
+          {items.length === 0 ? (
+            <div className="text-center py-8">
+              <ArrowRight className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Selecciona productos arriba para agregarlos al carrito</p>
+            </div>
+          ) : (
+            <div>
+              <div className="divide-y">
+                {items.map((item) => (
+                  <div key={item.product_id} className="flex flex-wrap items-center gap-3 py-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {item.image_url ? (
+                        <Image src={item.image_url} alt={item.product_name} width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" />
+                      ) : (
+                        <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <Package className="h-4 w-4 text-muted-foreground" />
                         </div>
-                      ))}
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{item.product_name}</p>
+                        <p className="text-xs text-muted-foreground">Bs {item.price.toFixed(2)} c/u</p>
+                      </div>
                     </div>
-                  </ScrollArea>
-                </div>
-              )}
+                    <div className="flex items-center gap-2">
+                      <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
+                        onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="text-sm font-mono w-8 text-center tabular-nums font-medium">{item.quantity}</span>
+                      <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
+                        onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="text-right min-w-[80px]">
+                      <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.price).toFixed(2)}</p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                      onClick={() => removeItem(item.product_id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-              <Separator />
+          <Separator />
 
-              {items.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground shrink-0">Descuento</span>
-                  <div className="relative flex-1">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">Bs</span>
+          {/* Discount + Total + Payment */}
+          {items.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground shrink-0">Descuento</span>
+                  <div className="relative flex-1 max-w-40">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Bs</span>
                     <Input type="text" inputMode="decimal"
                       value={discount}
                       onChange={(e) => setDiscount(e.target.value)}
                       placeholder="0.00"
-                      className="h-7 text-[11px] font-mono text-right pl-7" />
+                      className="pl-9 text-right" />
                   </div>
                 </div>
-              )}
 
-              <div className="flex items-center justify-between border-t border-border/40 pt-2">
-                <span className="text-xs font-semibold">Total</span>
-                <span className="text-sm font-bold font-mono text-primary">Bs {total.toFixed(2)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground shrink-0">Notas</span>
+                  <Textarea placeholder="Opcional" value={notes}
+                    onChange={(e) => setNotes(e.target.value)} className="flex-1 min-h-[40px]" />
+                </div>
               </div>
 
-              {items.length > 0 && (
-                <>
-                  <p className="text-[10px] text-muted-foreground font-medium">Tipo de Pago</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {([
-                      { value: 'cash', label: 'Efectivo', icon: WalletMinimal, activeColor: 'border-success bg-success/10 text-success' },
-                      { value: 'qr', label: 'QR / Transf.', icon: ScanQrCode, activeColor: 'border-info bg-info/10 text-info' },
-                      { value: 'mixed', label: 'Mixto', icon: ArrowLeftRight, activeColor: 'border-warning bg-warning/10 text-warning' },
-                      { value: 'credit', label: 'Crédito', icon: CreditCard, activeColor: 'border-pending bg-pending/10 text-pending' },
-                    ] as const).map(({ value, label, icon: Icon, activeColor }) => (
-                      <button key={value} type="button"
-                        onClick={() => {
-                          setPaymentType(value)
-                          if (value !== 'mixed') { setCashAmount(''); setQrAmount('') }
-                          if (value !== 'credit') { setCreditAnticipo(''); setAnticipoCash(''); setAnticipoQr('') }
-                        }}
-                        className={cn(
-                          'flex flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-[10px] font-medium transition-all',
-                          paymentType === value ? activeColor : 'border-border hover:bg-accent text-muted-foreground'
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Cash: show total as amount */}
-                  {paymentType === 'cash' && (
-                    <div className="rounded-lg border bg-success/5 px-3 py-2 text-center">
-                      <p className="text-[10px] text-success font-medium">Pago en efectivo</p>
-                      <p className="text-lg font-bold font-mono text-success">Bs {total.toFixed(2)}</p>
-                    </div>
-                  )}
-
-                  {/* QR: show total as amount */}
-                  {paymentType === 'qr' && (
-                    <div className="rounded-lg border bg-info/5 px-3 py-2 text-center">
-                      <p className="text-[10px] text-info font-medium">QR / Transferencia</p>
-                      <p className="text-lg font-bold font-mono text-info">Bs {total.toFixed(2)}</p>
-                    </div>
-                  )}
-
-                  {/* Mixed: cash + qr inputs */}
-                  {paymentType === 'mixed' && (
-                    <div className="space-y-2">
-                      <div className="rounded-lg border px-3 py-2">
-                        <label className="text-[10px] text-muted-foreground font-medium flex items-center gap-1 mb-1">
-                          <WalletMinimal className="h-3 w-3 text-success" /> Efectivo
-                        </label>
-                        <Input type="text" inputMode="decimal"
-                          value={cashAmount}
-                          onChange={(e) => {
-                            setCashAmount(e.target.value)
-                            const cash = parseFloat(e.target.value) || 0
-                            setQrAmount(Math.max(0, total - cash) > 0 ? (total - cash).toFixed(2) : '0')
-                          }}
-                          className="h-8 text-[12px] font-mono text-right" placeholder="0.00" />
-                      </div>
-                      <div className={cn('rounded-lg border px-3 py-2', parseFloat(qrAmount) > 0 ? 'bg-info/5' : 'bg-muted/30')}>
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                            <ScanQrCode className="h-3 w-3 text-info" /> QR / Transferencia
-                          </label>
-                          <span className="text-sm font-bold font-mono text-info">Bs {(parseFloat(qrAmount) || 0).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Credit: anticipo + payment method for anticipo */}
-                  {paymentType === 'credit' && (
-                    <div className="space-y-2">
-                      <div className="rounded-lg border border-pending/30 bg-pending/5 px-3 py-2">
-                        <label className="text-[10px] text-pending font-medium flex items-center gap-1 mb-1">
-                          <WalletMinimal className="h-3 w-3" /> Anticipo (opcional)
-                        </label>
-                        <Input type="text" inputMode="decimal"
-                          value={creditAnticipo}
-                          onChange={(e) => { setCreditAnticipo(e.target.value) }}
-                          className="h-8 text-[12px] font-mono text-right" placeholder="0.00" />
-                      </div>
-
-                      {parseFloat(creditAnticipo) > 0 && (
-                        <div className="rounded-lg border px-3 py-2 space-y-2">
-                          <p className="text-[10px] text-muted-foreground font-medium">Método de pago del anticipo</p>
-                          <div className="grid grid-cols-3 gap-1">
-                            {([
-                              { value: 'cash' as const, label: 'Efectivo', icon: WalletMinimal, activeColor: 'border-success bg-success/10 text-success' },
-                              { value: 'qr' as const, label: 'QR', icon: ScanQrCode, activeColor: 'border-info bg-info/10 text-info' },
-                              { value: 'mixed' as const, label: 'Mixto', icon: ArrowLeftRight, activeColor: 'border-warning bg-warning/10 text-warning' },
-                            ]).map(({ value, label, icon: Icon2, activeColor }) => (
-                              <button key={value} type="button"
-                                onClick={() => {
-                                  setAnticipoPaymentType(value)
-                                  setAnticipoCash(''); setAnticipoQr('')
-                                  const a = parseFloat(creditAnticipo) || 0
-                                  if (value === 'cash') setAnticipoCash(a > 0 ? String(a) : '')
-                                  else if (value === 'qr') setAnticipoQr(a > 0 ? a.toFixed(2) : '')
-                                }}
-                                className={cn(
-                                  'flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[9px] font-medium transition-all',
-                                  anticipoPaymentType === value ? activeColor : 'border-border hover:bg-accent text-muted-foreground'
-                                )}
-                              >
-                                <Icon2 className="h-3 w-3" />
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                          {anticipoPaymentType === 'mixed' && (
-                            <div className="space-y-1.5">
-                              <div>
-                                <label className="text-[9px] text-muted-foreground">Efectivo</label>
-                                <Input type="text" inputMode="decimal"
-                                  value={anticipoCash}
-                                  onChange={(e) => {
-                                    setAnticipoCash(e.target.value)
-                                    const a = parseFloat(creditAnticipo) || 0
-                                    const c = parseFloat(e.target.value) || 0
-                                    setAnticipoQr(Math.max(0, a - c) > 0 ? (a - c).toFixed(2) : '0')
-                                  }}
-                                  className="h-7 text-[11px] font-mono text-right" placeholder="0.00" />
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] text-muted-foreground">QR</span>
-                                <span className="text-[11px] font-mono">Bs {(parseFloat(anticipoQr) || 0).toFixed(2)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+              <div className="space-y-4">
+                <p className="text-sm font-medium text-muted-foreground">Tipo de Pago</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'cash', label: 'Efectivo', icon: WalletMinimal, activeColor: 'border-success bg-success/10 text-success' },
+                    { value: 'qr', label: 'QR / Transf.', icon: ScanQrCode, activeColor: 'border-info bg-info/10 text-info' },
+                    { value: 'mixed', label: 'Mixto', icon: ArrowLeftRight, activeColor: 'border-warning bg-warning/10 text-warning' },
+                    { value: 'credit', label: 'Crédito', icon: CreditCard, activeColor: 'border-pending bg-pending/10 text-pending' },
+                  ] as const).map(({ value, label, icon: Icon, activeColor }) => (
+                    <button key={value} type="button"
+                      onClick={() => {
+                        setPaymentType(value)
+                        if (value !== 'mixed') { setCashAmount(''); setQrAmount('') }
+                        if (value !== 'credit') { setCreditAnticipo(''); setAnticipoCash(''); setAnticipoQr('') }
+                      }}
+                      className={cn(
+                        'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all',
+                        paymentType === value ? activeColor : 'border-border hover:bg-accent text-muted-foreground'
                       )}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
 
-                      <div className="flex items-center justify-between rounded-lg border border-pending/30 bg-pending/5 px-3 py-2">
-                        <span className="text-[10px] text-pending font-medium">Saldo pendiente</span>
-                        <span className="text-sm font-bold font-mono text-pending">
-                          Bs {(total - (parseFloat(creditAnticipo) || 0)).toFixed(2)}
-                        </span>
+                {/* Payment details */}
+                {paymentType === 'cash' && (
+                  <div className="rounded-xl border bg-success/5 px-4 py-3 text-center">
+                    <p className="text-sm text-success font-medium">Pago en efectivo</p>
+                    <p className="text-2xl font-bold font-mono text-success">Bs {total.toFixed(2)}</p>
+                  </div>
+                )}
+
+                {paymentType === 'qr' && (
+                  <div className="rounded-xl border bg-info/5 px-4 py-3 text-center">
+                    <p className="text-sm text-info font-medium">QR / Transferencia</p>
+                    <p className="text-2xl font-bold font-mono text-info">Bs {total.toFixed(2)}</p>
+                  </div>
+                )}
+
+                {paymentType === 'mixed' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border px-4 py-3">
+                      <label className="text-xs text-muted-foreground font-medium flex items-center gap-1 mb-2">
+                        <WalletMinimal className="h-4 w-4 text-success" /> Efectivo
+                      </label>
+                      <Input type="text" inputMode="decimal"
+                        value={cashAmount}
+                        onChange={(e) => {
+                          setCashAmount(e.target.value)
+                          const cash = parseFloat(e.target.value) || 0
+                          setQrAmount(Math.max(0, total - cash) > 0 ? (total - cash).toFixed(2) : '0')
+                        }}
+                        className="text-right font-mono" placeholder="0.00" />
+                    </div>
+                    <div className={cn('rounded-xl border px-4 py-3', parseFloat(qrAmount) > 0 ? 'bg-info/5' : 'bg-muted/30')}>
+                      <div className="flex items-center justify-between h-full">
+                        <div>
+                          <label className="text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1">
+                            <ScanQrCode className="h-4 w-4 text-info" /> QR / Transf.
+                          </label>
+                          <span className="text-lg font-bold font-mono text-info">Bs {(parseFloat(qrAmount) || 0).toFixed(2)}</span>
+                        </div>
                       </div>
                     </div>
-                  )}
-
-                  <Textarea placeholder="Notas (opcional)" value={notes}
-                    onChange={(e) => setNotes(e.target.value)} className="h-12 text-[11px]" />
-                  <div className="flex gap-1.5">
-                    <Button type="button" variant="outline" size="sm" className="flex-1 h-7 text-[11px]" onClick={() => router.back()}>
-                      Cancelar
-                    </Button>
-                    <Button size="sm" className="flex-1 h-7 text-[11px]" onClick={handleSubmit}
-                      disabled={submitting || !branchId || items.length === 0}>
-                      {submitting ? 'Guardando...' : 'Registrar'}
-                    </Button>
                   </div>
-                </>
+                )}
+
+                {paymentType === 'credit' && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-pending/30 bg-pending/5 px-4 py-3">
+                      <label className="text-xs text-pending font-medium flex items-center gap-1 mb-2">
+                        <WalletMinimal className="h-4 w-4" /> Anticipo (opcional)
+                      </label>
+                      <Input type="text" inputMode="decimal"
+                        value={creditAnticipo}
+                        onChange={(e) => { setCreditAnticipo(e.target.value) }}
+                        className="text-right font-mono" placeholder="0.00" />
+                    </div>
+
+                    {parseFloat(creditAnticipo) > 0 && (
+                      <div className="rounded-xl border px-4 py-3 space-y-3">
+                        <p className="text-xs text-muted-foreground font-medium">Método del anticipo</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([
+                            { value: 'cash' as const, label: 'Efectivo', icon: WalletMinimal, activeColor: 'border-success bg-success/10 text-success' },
+                            { value: 'qr' as const, label: 'QR', icon: ScanQrCode, activeColor: 'border-info bg-info/10 text-info' },
+                            { value: 'mixed' as const, label: 'Mixto', icon: ArrowLeftRight, activeColor: 'border-warning bg-warning/10 text-warning' },
+                          ]).map(({ value, label, icon: Icon2, activeColor }) => (
+                            <button key={value} type="button"
+                              onClick={() => {
+                                setAnticipoPaymentType(value)
+                                setAnticipoCash(''); setAnticipoQr('')
+                                const a = parseFloat(creditAnticipo) || 0
+                                if (value === 'cash') setAnticipoCash(a > 0 ? String(a) : '')
+                                else if (value === 'qr') setAnticipoQr(a > 0 ? a.toFixed(2) : '')
+                              }}
+                              className={cn(
+                                'flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-xs font-medium transition-all',
+                                anticipoPaymentType === value ? activeColor : 'border-border hover:bg-accent text-muted-foreground'
+                              )}
+                            >
+                              <Icon2 className="h-4 w-4" />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {anticipoPaymentType === 'mixed' && (
+                          <div className="space-y-2">
+                            <div>
+                              <label className="text-xs text-muted-foreground">Efectivo</label>
+                              <Input type="text" inputMode="decimal"
+                                value={anticipoCash}
+                                onChange={(e) => {
+                                  setAnticipoCash(e.target.value)
+                                  const a = parseFloat(creditAnticipo) || 0
+                                  const c = parseFloat(e.target.value) || 0
+                                  setAnticipoQr(Math.max(0, a - c) > 0 ? (a - c).toFixed(2) : '0')
+                                }}
+                                className="text-right font-mono" placeholder="0.00" />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">QR</span>
+                              <span className="text-sm font-mono">Bs {(parseFloat(anticipoQr) || 0).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between rounded-xl border border-pending/30 bg-pending/5 px-4 py-3">
+                      <span className="text-sm text-pending font-medium">Saldo pendiente</span>
+                      <span className="text-lg font-bold font-mono text-pending">
+                        Bs {(total - (parseFloat(creditAnticipo) || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Total + Actions */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-border/40">
+            <div className="flex items-baseline gap-3">
+              <span className="text-base font-semibold">Total</span>
+              <span className="text-2xl font-bold font-mono text-primary">Bs {total.toFixed(2)}</span>
+              {discountVal > 0 && (
+                <span className="text-xs text-muted-foreground line-through">Bs {itemsTotal.toFixed(2)}</span>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => router.back()}>
+                Cancelar
+              </Button>
+              <Button className="flex-1 sm:flex-none" onClick={handleSubmit}
+                disabled={submitting || !branchId || items.length === 0}>
+                {submitting ? 'Guardando...' : 'Registrar Venta'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

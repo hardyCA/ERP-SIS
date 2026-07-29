@@ -6,10 +6,17 @@ export const purchaseItemSchema = z.object({
   unit_cost: z.coerce.number().min(0, 'El costo no puede ser negativo'),
 })
 
+export const expenseSchema = z.object({
+  description: z.string().min(1, 'La descripción es requerida'),
+  cost: z.coerce.number().min(0, 'El costo no puede ser negativo'),
+})
+
 export const createPurchaseSchema = z.object({
   branch_id: z.string().uuid('Selecciona una sucursal'),
+  supplier_id: z.string().uuid().optional().or(z.literal('')),
   notes: z.string().optional(),
   items: z.array(purchaseItemSchema).min(1, 'Agrega al menos un producto'),
+  expenses: z.array(expenseSchema).optional(),
 })
 export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema>
 

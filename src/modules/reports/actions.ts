@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/shared/lib/supabase/server'
-import type { ActionResponse, DashboardStats, SalesReportItem, InventoryReportItem, CashReportItem, CreditReportItem, ProfitReportItem } from './types'
+import type { ActionResponse, DashboardStats, SalesReportItem, InventoryReportItem, CashReportItem, CreditReportItem, ProfitReportItem, PurchaseStats, PurchaseReportItem } from './types'
 
 export async function getWeeklySalesChart(branchId?: string): Promise<ActionResponse<Array<{ day: string; amount: number; count: number }>>> {
   try {
@@ -116,6 +116,21 @@ export async function getDashboardStats(branchId?: string): Promise<ActionRespon
 
     const { count: lowStockCount } = await lowStockQuery
 
+    let purchaseQuery = supabase.from('purchases').select('total, status')
+
+    let pendingQuery = supabase.from('purchases').select('total').eq('status', 'pending')
+
+    if (branchId) {
+      purchaseQuery = purchaseQuery.eq('branch_id', branchId)
+      pendingQuery = pendingQuery.eq('branch_id', branchId)
+    }
+
+    const { data: allPurchases } = await purchaseQuery
+    const { data: pendingPurchases } = await pendingQuery
+
+    const totalPurchaseAmount = (allPurchases ?? []).reduce((sum, p) => sum + Number(p.total), 0)
+    const pendingPurchaseAmount = (pendingPurchases ?? []).reduce((sum, p) => sum + Number(p.total), 0)
+
     return {
       success: true,
       message: '',
@@ -127,6 +142,10 @@ export async function getDashboardStats(branchId?: string): Promise<ActionRespon
         activeCreditsAmount,
         cashBalance,
         lowStockCount: lowStockCount ?? 0,
+        pendingPurchases: pendingPurchases?.length ?? 0,
+        pendingPurchaseAmount,
+        totalPurchases: allPurchases?.length ?? 0,
+        totalPurchaseAmount,
       },
     }
   } catch (e) {
@@ -311,6 +330,87 @@ export async function getProfitReport(branchId?: string, dateFrom?: string, date
     })
 
     return { success: true, message: '', data: items }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function getPurchaseStats(branchId?: string): Promise<ActionResponse<PurchaseStats>> {
+  try {
+    const supabase = await createClient()
+    let query = supabase.from('purchases').select('status, total')
+    if (branchId) query = query.eq('branch_id', branchId)
+
+    const { data } = await query
+
+    const pending = (data ?? []).filter(p => p.status === 'pending')
+    const approved = (data ?? []).filter(p => p.status === 'approved')
+    const cancelled = (data ?? []).filter(p => p.status === 'cancelled')
+
+    return {
+      success: true,
+      message: '',
+      data: {
+        pendingCount: pending.length,
+        pendingAmount: pending.reduce((s, p) => s + Number(p.total), 0),
+        approvedCount: approved.length,
+        approvedAmount: approved.reduce((s, p) => s + Number(p.total), 0),
+        cancelledCount: cancelled.length,
+        cancelledAmount: cancelled.reduce((s, p) => s + Number(p.total), 0),
+      },
+    }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function getPurchaseReport(branchId?: string, dateFrom?: string, dateTo?: string): Promise<ActionResponse<PurchaseReportItem[]>> {
+  try {
+    const supabase = await createClient()
+    let query = supabase
+      .from('purchases')
+      .select('*, branches(name), suppliers(name)')
+      .order('created_at', { ascending: false })
+
+    if (branchId) query = query.eq('branch_id', branchId)
+    if (dateFrom) query = query.gte('created_at', dateFrom)
+    if (dateTo) query = query.lte('created_at', dateTo)
+
+    const { data, error: queryErr } = await query
+    if (queryErr) throw new TypeError(queryErr.message)
+
+    const userIds = [...new Set((data ?? []).map(p => (p as Record<string, unknown>).created_by as string).filter(Boolean))]
+    const userMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { cookies } = await import('next/headers')
+      const { createServerClient } = await import('@supabase/ssr')
+      const cookieStore = await cookies()
+      const admin = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { cookies: { getAll() { return cookieStore.getAll() }, setAll() {} } }
+      )
+      const { data: users } = await admin.auth.admin.listUsers()
+      for (const u of users?.users ?? []) {
+        userMap[u.id] = (u.user_metadata?.full_name as string) || u.email || u.phone || 'Usuario'
+      }
+    }
+
+    const enriched = (data ?? []).map(p => {
+      const pd = p as Record<string, unknown>
+      return {
+        id: pd.id as string,
+        number: pd.number as number,
+        total: Number(pd.total),
+        status: pd.status as string,
+        supplier_name: ((pd.suppliers as Record<string, unknown> | undefined)?.name as string) ?? null,
+        branches: pd.branches ? { name: ((pd.branches as Record<string, unknown>).name as string) } : null,
+        created_at: pd.created_at as string,
+        created_by_name: (pd.created_by ? (userMap[pd.created_by as string] ?? 'Usuario') : null) as string | null,
+      }
+    })
+
+    return { success: true, message: '', data: enriched }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }

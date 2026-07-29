@@ -1,8 +1,6 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getActiveBranches } from '@/shared/actions/branches'
 
 interface Branch {
   id: string
@@ -23,33 +21,28 @@ const BranchContext = createContext<BranchContextType>({
   branches: [],
 })
 
-export function BranchProvider({ children }: { children: React.ReactNode }) {
+export function BranchProvider({ children, serverBranches = [] }: { children: React.ReactNode; serverBranches?: Branch[] }) {
   const [branchId, setBranchId] = useState('')
 
   useEffect(() => {
     const saved = localStorage.getItem('selectedBranchId')
-    if (saved)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved && serverBranches.some(b => b.id === saved)) {
       setBranchId(saved)
-  }, [])
-
-  const { data } = useQuery({
-    queryKey: ['active-branches'],
-    queryFn: getActiveBranches,
-    staleTime: 60000,
-  })
-
-  const branches = (data?.success ? data.data : []) as Branch[]
+    } else if (serverBranches.length > 0) {
+      setBranchId(serverBranches[0].id)
+      localStorage.setItem('selectedBranchId', serverBranches[0].id)
+    }
+  }, [serverBranches])
 
   const setBranch = useCallback((id: string) => {
     setBranchId(id)
     localStorage.setItem('selectedBranchId', id)
   }, [])
 
-  const selected = branches.find(b => b.id === branchId)
+  const selected = serverBranches.find(b => b.id === branchId)
 
   return (
-    <BranchContext.Provider value={{ branchId, branchName: selected?.name ?? '', setBranch, branches }}>
+    <BranchContext.Provider value={{ branchId, branchName: selected?.name ?? '', setBranch, branches: serverBranches }}>
       {children}
     </BranchContext.Provider>
   )

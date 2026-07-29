@@ -30,7 +30,7 @@ export function ProductPricesDialog({ productId, productName, open, onOpenChange
   const { data: branchesData } = useQuery({
     queryKey: ['active-branches'],
     queryFn: getActiveBranches,
-    staleTime: 30000,
+    staleTime: 0,
   })
 
   const { data: pricesData, isLoading } = useQuery({

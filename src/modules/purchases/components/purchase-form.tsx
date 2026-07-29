@@ -14,9 +14,10 @@ import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Badge } from '@/shared/components/ui/badge'
 import { Separator } from '@/shared/components/ui/separator'
-import { ScrollArea } from '@/shared/components/ui/scroll-area'
 import { Card, CardContent } from '@/shared/components/ui/card'
-import { Package, Plus, ShoppingCart, Check, Folder, FolderOpen, Minus, ArrowRight } from 'lucide-react'
+import { SupplierSelector } from '@/modules/suppliers/components/supplier-selector'
+import { useShowCost } from '@/shared/lib/use-role'
+import { Package, Plus, ShoppingCart, Check, Folder, FolderOpen, Minus, ArrowRight, Truck, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/shared/lib/utils'
 
@@ -39,32 +40,35 @@ export function PurchaseForm() {
   const router = useRouter()
   const { branchId } = useBranch()
   const [notes, setNotes] = useState('')
+  const [supplier, setSupplier] = useState<{ id: string; name: string } | null>(null)
   const [items, setItems] = useState<LineItem[]>([])
+  const [expenses, setExpenses] = useState<Array<{ description: string; cost: string }>>([])
   const [submitting, setSubmitting] = useState(false)
   const [pendingQty, setPendingQty] = useState<Record<string, string>>({})
   const [pendingCost, setPendingCost] = useState<Record<string, string>>({})
 
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const showCost = useShowCost()
 
   const { data: brandsData } = useQuery({
     queryKey: ['brands'],
     queryFn: getBrands,
-    staleTime: 60000,
+    staleTime: 0,
   })
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories', selectedBrand],
     queryFn: () => getCategoriesByBrand(selectedBrand!),
     enabled: !!selectedBrand,
-    staleTime: 60000,
+    staleTime: 0,
   })
 
   const { data: productsData } = useQuery({
     queryKey: ['products-for-purchase', selectedBrand, selectedCategory],
     queryFn: () => getProductsByCategory(selectedBrand!, selectedCategory!),
     enabled: !!selectedBrand && !!selectedCategory,
-    staleTime: 60000,
+    staleTime: 0,
   })
 
   const brands = (brandsData?.success ? (brandsData.data ?? []) : []) as Array<{ id: string; name: string }>
@@ -98,7 +102,19 @@ export function PurchaseForm() {
     setItems(items.filter(i => i.product_id !== productId))
   }
 
-  const total = items.reduce((sum, i) => sum + (i.quantity * i.unit_cost), 0)
+  const addExpense = () => setExpenses(prev => [...prev, { description: '', cost: '0' }])
+
+  const updateExpense = (index: number, field: 'description' | 'cost', value: string) => {
+    setExpenses(prev => prev.map((e, i) => i === index ? { ...e, [field]: value } : e))
+  }
+
+  const removeExpense = (index: number) => {
+    setExpenses(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const totalProductos = items.reduce((sum, i) => sum + (i.quantity * i.unit_cost), 0)
+  const totalGastos = expenses.reduce((sum, e) => sum + (parseFloat(e.cost) || 0), 0)
+  const total = totalProductos + totalGastos
 
   const handleSubmit = async () => {
     if (!branchId) { toast.error('Selecciona una sucursal en el menú lateral'); return }
@@ -108,12 +124,17 @@ export function PurchaseForm() {
     setSubmitting(true)
     const formData = new FormData()
     formData.set('branch_id', branchId)
+    formData.set('supplier_id', supplier?.id ?? '')
     formData.set('notes', notes)
     formData.set('items', JSON.stringify(items.map(i => ({
       product_id: i.product_id,
       quantity: i.quantity,
       unit_cost: i.unit_cost,
     }))))
+    formData.set('expenses', JSON.stringify(expenses
+      .filter(e => e.description.trim() && (parseFloat(e.cost) || 0) > 0)
+      .map(e => ({ description: e.description.trim(), cost: parseFloat(e.cost) || 0 }))
+    ))
 
     const result = await createPurchase(formData)
     setSubmitting(false)
@@ -128,9 +149,9 @@ export function PurchaseForm() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4">
-      {/* Left: Product Browser */}
-      <div className="w-full lg:flex-[6] min-w-0 space-y-2">
+    <div className="flex flex-col gap-4">
+      {/* Product Browser */}
+      <div className="w-full min-w-0 space-y-2">
         {/* Step 1: Brand chips */}
         <div className="rounded-lg border bg-card px-3 py-2">
           <div className="flex items-center gap-2 mb-1.5">
@@ -218,7 +239,7 @@ export function PurchaseForm() {
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1 border-b bg-muted/30">
                   <div className="w-7 shrink-0" />
                   <p className="flex-1 text-[10px] text-muted-foreground font-medium">Producto</p>
-                  <p className="w-20 shrink-0 text-[10px] text-muted-foreground font-medium text-right">Costo Bs</p>
+                  {showCost && <p className="w-20 shrink-0 text-[10px] text-muted-foreground font-medium text-right">Costo Bs</p>}
                   <p className="w-16 shrink-0 text-[10px] text-muted-foreground font-medium text-center">Cant</p>
                   <div className="w-[65px] shrink-0" />
                 </div>
@@ -243,15 +264,17 @@ export function PurchaseForm() {
 
                         {/* Controls (Costo + Cant + Agregar) */}
                         <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-border/40">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-muted-foreground sm:hidden">Costo:</span>
-                            <div className="w-20 sm:w-20 shrink-0">
-                              <Input type="text" inputMode="decimal"
-                                value={costStr}
-                                onChange={(e) => setPendingCost(prev => ({ ...prev, [product.id]: e.target.value }))}
-                                className="h-8 sm:h-7 text-xs sm:text-[11px] font-mono text-right" />
+                          {showCost && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground sm:hidden">Costo:</span>
+                              <div className="w-20 sm:w-20 shrink-0">
+                                <Input type="text" inputMode="decimal"
+                                  value={costStr}
+                                  onChange={(e) => setPendingCost(prev => ({ ...prev, [product.id]: e.target.value }))}
+                                  className="h-8 sm:h-7 text-xs sm:text-[11px] font-mono text-right" />
+                              </div>
                             </div>
-                          </div>
+                          )}
 
                           <div className="flex items-center gap-1.5">
                             <span className="text-[10px] text-muted-foreground sm:hidden">Cant:</span>
@@ -259,13 +282,13 @@ export function PurchaseForm() {
                               <Input type="text" inputMode="numeric"
                                 value={qtyStr}
                                 onChange={(e) => setPendingQty(prev => ({ ...prev, [product.id]: e.target.value }))}
-                                onKeyDown={(e) => { if (e.key === 'Enter') addItem(product, qtyStr, costStr) }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') addItem(product, qtyStr, showCost ? costStr : String(Number(product.cost) || 0)) }}
                                 className="h-8 sm:h-7 text-xs sm:text-[11px] font-mono text-center" />
                             </div>
                           </div>
 
                           <Button size="sm" className="h-8 sm:h-7 text-xs sm:text-[11px] px-3 sm:px-2.5 shrink-0"
-                            onClick={() => addItem(product, qtyStr, costStr)}>
+                            onClick={() => addItem(product, qtyStr, showCost ? costStr : String(Number(product.cost) || 0))}>
                             <Plus className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1 sm:mr-0.5" /> Agregar
                           </Button>
                         </div>
@@ -287,97 +310,154 @@ export function PurchaseForm() {
         )}
       </div>
 
-      {/* Right: Cart sidebar */}
-      <div className="w-full lg:flex-[4] shrink-0">
-        <div className="lg:sticky lg:top-4">
-          <Card>
-            <div className="flex items-center justify-between px-4 pt-3 pb-2">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className={cn('h-4 w-4', items.length > 0 ? 'text-primary' : 'text-muted-foreground')} />
-                <span className="text-sm font-semibold">Carrito de Compras</span>
-              </div>
-              <Badge variant={items.length > 0 ? 'default' : 'secondary'} className="text-[10px] h-5 px-2">
-                {items.length}
-              </Badge>
+      {/* Cart */}
+      <Card className={cn('border-2 overflow-hidden', items.length > 0 ? 'border-primary/20' : 'border-dashed')}>
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className={cn('h-5 w-5', items.length > 0 ? 'text-primary' : 'text-muted-foreground')} />
+              <span className="text-base font-semibold">Carrito de Compras</span>
             </div>
-            <CardContent className="px-3 pb-3 space-y-2">
-              {items.length === 0 ? (
-                <div className="text-center py-5">
-                  <ArrowRight className="h-6 w-6 text-muted-foreground/30 mx-auto mb-1" />
-                  <p className="text-[10px] text-muted-foreground">Agrega productos</p>
-                  <p className="text-[10px] text-muted-foreground/60">desde el selector superior</p>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-center gap-2 px-1 py-1 border-b bg-muted/30">
-                    <div className="flex-1 min-w-0 text-[10px] text-muted-foreground font-medium">Producto</div>
-                    <div className="w-14 shrink-0 text-[10px] text-muted-foreground font-medium text-center">Cant</div>
-                    <div className="w-14 shrink-0 text-[10px] text-muted-foreground font-medium text-right">Costo</div>
-                    <div className="w-16 shrink-0 text-[10px] text-muted-foreground font-medium text-right">Subtotal</div>
-                    <div className="w-8 shrink-0" />
-                  </div>
-                  <ScrollArea className="h-[220px] sm:h-[260px] pr-1 -mr-1">
-                    <div className="divide-y">
-                      {items.map((item) => (
-                        <div key={item.product_id} className="flex items-center gap-2 py-2 sm:py-1.5 px-1">
-                          <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                            {item.image_url ? (
-                              <Image src={item.image_url} alt={item.product_name} width={20} height={20} className="h-5 w-5 rounded object-cover shrink-0" />
-                            ) : (
-                              <div className="h-5 w-5 rounded bg-muted flex items-center justify-center shrink-0">
-                                <Package className="h-3 w-3 text-muted-foreground" />
-                              </div>
-                            )}
-                            <p className="text-[11px] sm:text-[10px] font-medium truncate leading-tight">{item.product_name}</p>
-                          </div>
-                          <div className="w-14 shrink-0 flex items-center justify-center gap-0.5">
-                            <button type="button" className="h-5 w-5 sm:h-4 sm:w-4 rounded border flex items-center justify-center hover:bg-accent"
-                              onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
-                              <Minus className="h-2.5 w-2.5 sm:h-2 sm:w-2" />
-                            </button>
-                            <span className="text-[11px] sm:text-[10px] font-mono w-4 text-center tabular-nums">{item.quantity}</span>
-                            <button type="button" className="h-5 w-5 sm:h-4 sm:w-4 rounded border flex items-center justify-center hover:bg-accent"
-                              onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
-                              <Plus className="h-2.5 w-2.5 sm:h-2 sm:w-2" />
-                            </button>
-                          </div>
-                          <div className="w-14 shrink-0 text-[10px] font-mono text-right text-muted-foreground">Bs {item.unit_cost.toFixed(2)}</div>
-                          <div className="w-16 shrink-0 text-[11px] font-mono font-medium text-right">Bs {(item.quantity * item.unit_cost).toFixed(2)}</div>
-                          <button type="button" className="w-8 shrink-0 text-[11px] text-destructive hover:underline text-center font-bold"
-                            onClick={() => removeItem(item.product_id)}>×</button>
-                        </div>
-                      ))}
+            <Badge variant={items.length > 0 ? 'default' : 'secondary'} className="text-xs px-3 py-1">
+              {items.length} {items.length === 1 ? 'producto' : 'productos'}
+            </Badge>
+          </div>
+
+          {items.length === 0 ? (
+            <div className="text-center py-8">
+              <ArrowRight className="h-10 w-10 text-muted-foreground/20 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Selecciona productos arriba para agregarlos al carrito</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {items.map((item) => (
+                <div key={item.product_id} className="flex flex-wrap items-center gap-3 py-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {item.image_url ? (
+                      <Image src={item.image_url} alt={item.product_name} width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" />
+                    ) : (
+                      <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{item.product_name}</p>
+                      {showCost && <p className="text-xs text-muted-foreground">Bs {item.unit_cost.toFixed(2)} c/u</p>}
                     </div>
-                  </ScrollArea>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
+                      onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-sm font-mono w-8 text-center tabular-nums font-medium">{item.quantity}</span>
+                    <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
+                      onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {showCost && (
+                    <div className="text-right min-w-[80px]">
+                      <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.unit_cost).toFixed(2)}</p>
+                    </div>
+                  )}
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                    onClick={() => removeItem(item.product_id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
-              )}
+              ))}
+            </div>
+          )}
 
-              <Separator />
+          <Separator />
 
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-medium text-muted-foreground">Total Compra</span>
-                <span className="text-base sm:text-sm font-bold font-mono text-primary">Bs {total.toFixed(2)}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              {/* Supplier */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Truck className="h-4 w-4" /> Proveedor
+                </div>
+                <SupplierSelector
+                  value={supplier?.id ?? null}
+                  onChange={(id, name) => setSupplier(id ? { id, name } : null)}
+                />
               </div>
 
-              {items.length > 0 && (
-                <>
-                  <Textarea placeholder="Notas de recepción o proveedor (opcional)" value={notes}
-                    onChange={(e) => setNotes(e.target.value)} className="h-14 text-xs sm:text-[11px]" />
-                  <div className="flex gap-2 pt-1">
-                    <Button type="button" variant="outline" size="sm" className="flex-1 h-9 sm:h-7 text-xs sm:text-[11px]" onClick={() => router.back()}>
-                      Cancelar
-                    </Button>
-                    <Button size="sm" className="flex-1 h-9 sm:h-7 text-xs sm:text-[11px] font-semibold" onClick={handleSubmit}
-                      disabled={submitting || !branchId || items.length === 0}>
-                      {submitting ? 'Guardando...' : 'Registrar Compra'}
+              <Textarea placeholder="Notas de recepción (opcional)" value={notes}
+                onChange={(e) => setNotes(e.target.value)} className="min-h-[60px]" />
+            </div>
+
+            {showCost && (
+              <div className="space-y-4">
+                {/* Operating Expenses */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Gastos Operativos</span>
+                    <Button type="button" variant="outline" size="sm" onClick={addExpense}>
+                      <Plus className="h-4 w-4 mr-1" /> Agregar
                     </Button>
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                  {expenses.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Sin gastos registrados</p>
+                  )}
+                  {expenses.map((exp, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input placeholder="Detalle" value={exp.description}
+                        onChange={(e) => updateExpense(i, 'description', e.target.value)}
+                        className="flex-1" />
+                      <div className="relative w-28 shrink-0">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Bs</span>
+                        <Input type="text" inputMode="decimal" placeholder="0" value={exp.cost}
+                          onChange={(e) => updateExpense(i, 'cost', e.target.value)}
+                          className="pl-8 text-right" />
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => removeExpense(i)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            {showCost && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total Productos</span>
+                  <span className="text-base font-semibold font-mono">Bs {totalProductos.toFixed(2)}</span>
+                </div>
+                {totalGastos > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Gastos</span>
+                    <span className="text-base font-semibold font-mono">Bs {totalGastos.toFixed(2)}</span>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex items-center justify-between pt-1 border-t border-border/40">
+              <span className="text-base font-bold">Total Compra</span>
+              <span className="text-2xl font-bold font-mono text-primary">Bs {total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 justify-end pt-2 border-t border-border/40">
+            <Button type="button" variant="outline" onClick={() => router.back()}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit}
+              disabled={submitting || !branchId || items.length === 0}>
+              {submitting ? 'Guardando...' : 'Registrar Compra'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

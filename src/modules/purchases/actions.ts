@@ -6,7 +6,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createPurchaseSchema } from './types'
 import type { ActionResponse } from './types'
-import type { Branches, Products } from '@/shared/types/database.types'
+import type { Branches, Products, InventoryItems } from '@/shared/types/database.types'
 
 async function getAdminClient() {
   const cookieStore = await cookies()
@@ -33,7 +33,7 @@ export async function getPurchases(params?: {
 
     let query = supabase
       .from('purchases')
-      .select('*, branches(name)', { count: 'exact' })
+      .select('*, branches(name), suppliers(name, document_id), purchase_expenses(description, cost)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to)
 
@@ -70,7 +70,7 @@ export async function getPurchaseById(id: string) {
     const supabase = await createClient()
     const { data: purchase, error } = await supabase
       .from('purchases')
-      .select('*, branches(name, address, phone)')
+      .select('*, branches(name, address, phone), suppliers(name, document_id)')
       .eq('id', id)
       .single()
     if (error) throw new Error(error.message)
@@ -78,6 +78,11 @@ export async function getPurchaseById(id: string) {
     const { data: items } = await supabase
       .from('purchase_items')
       .select('*, products(name, image_url)')
+      .eq('purchase_id', id)
+
+    const { data: expenses } = await supabase
+      .from('purchase_expenses')
+      .select('*')
       .eq('purchase_id', id)
 
     let created_by_name: string | null = null
@@ -88,7 +93,7 @@ export async function getPurchaseById(id: string) {
       created_by_name = (meta?.full_name as string) || user?.user?.email || 'Usuario'
     }
 
-    return { success: true, message: '', data: { ...purchase, items: items ?? [], created_by_name } }
+    return { success: true, message: '', data: { ...purchase, items: items ?? [], expenses: expenses ?? [], created_by_name } }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -125,13 +130,18 @@ export async function searchProducts(query: string): Promise<ActionResponse<Prod
 export async function createPurchase(formData: FormData): Promise<ActionResponse> {
   try {
     const branch_id = formData.get('branch_id') as string
+    const supplier_id = formData.get('supplier_id') as string
     const notes = formData.get('notes') as string
 
     const itemsJson = formData.get('items') as string
     let items: Array<{ product_id: string; quantity: number; unit_cost: number }> = []
     try { items = JSON.parse(itemsJson) } catch { return { success: false, message: 'Error al procesar los productos' } }
 
-    const validated = createPurchaseSchema.safeParse({ branch_id, notes, items })
+    const expensesJson = formData.get('expenses') as string
+    let expenses: Array<{ description: string; cost: number }> = []
+    try { if (expensesJson) expenses = JSON.parse(expensesJson) } catch {}
+
+    const validated = createPurchaseSchema.safeParse({ branch_id, supplier_id, notes, items, expenses })
     if (!validated.success) {
       return {
         success: false,
@@ -140,14 +150,23 @@ export async function createPurchase(formData: FormData): Promise<ActionResponse
       }
     }
 
-    const total = validated.data.items.reduce((sum, i) => sum + (i.quantity * i.unit_cost), 0)
+    const totalProductos = validated.data.items.reduce((sum, i) => sum + (i.quantity * i.unit_cost), 0)
+    const totalGastos = (validated.data.expenses ?? []).reduce((sum, e) => sum + e.cost, 0)
+    const total = totalProductos + totalGastos
 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     const { data: purchase, error: purchaseError } = await supabase
       .from('purchases')
-      .insert({ branch_id: validated.data.branch_id, total, notes: validated.data.notes || null, created_by: user?.id })
+      .insert({
+        branch_id: validated.data.branch_id,
+        supplier_id: validated.data.supplier_id || null,
+        total,
+        notes: validated.data.notes || null,
+        created_by: user?.id,
+        status: 'pending',
+      })
       .select()
       .single()
     if (purchaseError) throw new Error(purchaseError.message)
@@ -163,12 +182,45 @@ export async function createPurchase(formData: FormData): Promise<ActionResponse
     const { error: itemsError } = await supabase.from('purchase_items').insert(purchaseItems)
     if (itemsError) throw new Error(itemsError.message)
 
-    for (const item of validated.data.items) {
+    if (validated.data.expenses && validated.data.expenses.length > 0) {
+      const expenseRows = validated.data.expenses.map(e => ({
+        purchase_id: purchase.id,
+        description: e.description,
+        cost: e.cost,
+      }))
+      const { error: expensesError } = await supabase.from('purchase_expenses').insert(expenseRows)
+      if (expensesError) throw new Error(expensesError.message)
+    }
+
+    revalidatePath('/purchases')
+    return { success: true, message: 'Proforma guardada exitosamente', data: purchase }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function approvePurchase(id: string): Promise<ActionResponse> {
+  try {
+    const supabase = await createClient()
+
+    const { data: purchase, error: fetchError } = await supabase
+      .from('purchases')
+      .select('*, purchase_items(product_id, quantity, unit_cost)')
+      .eq('id', id)
+      .single()
+    if (fetchError) throw new Error(fetchError.message)
+    if (!purchase) throw new Error('Compra no encontrada')
+    if (purchase.status !== 'pending') throw new Error('Solo se pueden aprobar compras pendientes')
+    if (!purchase.branch_id) throw new Error('La compra no tiene sucursal asignada')
+
+    const items = (purchase as Record<string, unknown>).purchase_items as Array<{ product_id: string; quantity: number; unit_cost: number }>
+
+    for (const item of items) {
       const { data: existing } = await supabase
         .from('inventory_items')
         .select('id, quantity')
         .eq('product_id', item.product_id)
-        .eq('branch_id', validated.data.branch_id)
+        .eq('branch_id', purchase.branch_id)
         .single()
 
       if (existing) {
@@ -181,21 +233,21 @@ export async function createPurchase(formData: FormData): Promise<ActionResponse
           .from('inventory_items')
           .insert({
             product_id: item.product_id,
-            branch_id: validated.data.branch_id,
+            branch_id: purchase.branch_id,
             quantity: item.quantity,
             sale_price: 0,
           })
       }
 
-      // Recalcular costo promedio ponderado del producto
-      const { data: invData } = await supabase
+      const { data: invAll } = await supabase
         .from('inventory_items')
         .select('quantity')
         .eq('product_id', item.product_id)
-        .eq('branch_id', validated.data.branch_id)
-        .single()
 
-      if (invData) {
+      if (invAll) {
+        const stockTotal = invAll.reduce((sum, i) => sum + i.quantity, 0)
+        const stockAnterior = stockTotal - item.quantity
+
         const { data: productData } = await supabase
           .from('products')
           .select('cost')
@@ -203,11 +255,7 @@ export async function createPurchase(formData: FormData): Promise<ActionResponse
           .single()
 
         if (productData) {
-          const stockTotal = invData.quantity
-          const stockAnterior = stockTotal - item.quantity
           const costoAnterior = Number(productData.cost)
-
-          // Costo promedio ponderado
           const nuevoCosto = stockAnterior > 0
             ? (stockAnterior * costoAnterior + item.quantity * item.unit_cost) / stockTotal
             : item.unit_cost
@@ -220,8 +268,41 @@ export async function createPurchase(formData: FormData): Promise<ActionResponse
       }
     }
 
+    const { error: updateError } = await supabase
+      .from('purchases')
+      .update({ status: 'approved' })
+      .eq('id', id)
+    if (updateError) throw new Error(updateError.message)
+
     revalidatePath('/purchases')
-    return { success: true, message: 'Compra registrada exitosamente', data: purchase }
+    revalidatePath(`/purchases/${id}`)
+    return { success: true, message: 'Compra aprobada exitosamente' }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function cancelPurchase(id: string): Promise<ActionResponse> {
+  try {
+    const supabase = await createClient()
+
+    const { data: purchase } = await supabase
+      .from('purchases')
+      .select('status')
+      .eq('id', id)
+      .single()
+    if (!purchase) throw new Error('Compra no encontrada')
+    if (purchase.status !== 'pending') throw new Error('Solo se pueden cancelar compras pendientes')
+
+    const { error } = await supabase
+      .from('purchases')
+      .update({ status: 'cancelled' })
+      .eq('id', id)
+    if (error) throw new Error(error.message)
+
+    revalidatePath('/purchases')
+    revalidatePath(`/purchases/${id}`)
+    return { success: true, message: 'Compra cancelada' }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }

@@ -18,7 +18,7 @@ export function CategorySwitcher({ branchId, brandId, currentCategoryId, classNa
   const { data: result, isLoading } = useQuery({
     queryKey: ['categories', brandId],
     queryFn: () => getCategoriesByBrand(brandId),
-    staleTime: 30000,
+    staleTime: 0,
     enabled: !!brandId,
   })
 

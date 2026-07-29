@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getMovements, getBalance, createMovement } from '../actions'
+import { getMovements, getBalance, createMovement, createCashTransfer } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -19,6 +19,13 @@ import {
   DialogDescription,
 } from '@/shared/components/ui/dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -26,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { ArrowDown, ArrowUp, Plus, Minus, Wallet, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Minus, Wallet, ChevronLeft, ChevronRight, ArrowLeftRight } from 'lucide-react'
 import { movementTypeLabels, reverseTypes } from '../types'
 
 const PAGE_SIZE = 15
@@ -38,9 +45,21 @@ export function CashRegisterView() {
   const [showModal, setShowModal] = useState(false)
   const [modalType, setModalType] = useState<'manual_income' | 'manual_expense' | 'owner_withdrawal'>('manual_income')
   const [amount, setAmount] = useState('')
+  const [method, setMethod] = useState<'cash' | 'qr' | 'mixed'>('cash')
+  const [cashAmt, setCashAmt] = useState('')
+  const [qrAmt, setQrAmt] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [page, setPage] = useState(1)
+
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [transferDest, setTransferDest] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferMethod, setTransferMethod] = useState<'cash' | 'qr' | 'mixed'>('cash')
+  const [transferCashAmt, setTransferCashAmt] = useState('')
+  const [transferQrAmt, setTransferQrAmt] = useState('')
+  const [transferDesc, setTransferDesc] = useState('')
+  const [transferSubmitting, setTransferSubmitting] = useState(false)
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1) }, [branchId])
@@ -57,6 +76,13 @@ export function CashRegisterView() {
     staleTime: 0,
   })
 
+  const { data: branchesData } = useQuery({
+    queryKey: ['active-branches'],
+    queryFn: () => import('@/shared/actions/branches').then(m => m.getActiveBranches()),
+    staleTime: 60000,
+  })
+  const branches = (branchesData?.success ? branchesData.data : []) as Array<{ id: string; name: string }>
+
   const movements = Array.isArray(movementsData?.data) ? movementsData.data : []
   const movementsTotal = movementsData?.total ?? 0
   const movementsPages = Math.max(1, Math.ceil(movementsTotal / PAGE_SIZE))
@@ -65,20 +91,35 @@ export function CashRegisterView() {
   const openModal = (type: 'manual_income' | 'manual_expense' | 'owner_withdrawal') => {
     setModalType(type)
     setAmount('')
+    setMethod('cash')
+    setCashAmt('')
+    setQrAmt('')
     setDescription('')
     setShowModal(true)
   }
 
   const handleSubmit = async () => {
     if (!branchId) { toast.error('Selecciona una sucursal en el menú lateral'); return }
-    if (!amount || parseFloat(amount) <= 0) { toast.error('Ingresa un monto válido'); return }
+    if (method === 'mixed') {
+      const c = parseFloat(cashAmt) || 0
+      const q = parseFloat(qrAmt) || 0
+      if (c <= 0 || q <= 0) {
+        toast.error('En método mixto ambos montos deben ser mayor a 0'); return
+      }
+    } else if (!amount || parseFloat(amount) <= 0) {
+      toast.error('Ingresa un monto válido'); return
+    }
     if (!description) { toast.error('Ingresa una descripción'); return }
 
     setSubmitting(true)
+    const finalAmount = method === 'mixed' ? String((parseFloat(cashAmt) || 0) + (parseFloat(qrAmt) || 0)) : amount
     const formData = new FormData()
     formData.set('branch_id', branchId)
     formData.set('type', modalType)
-    formData.set('amount', amount)
+    formData.set('amount', finalAmount)
+    formData.set('transfer_method', method)
+    formData.set('cash_amount', method === 'mixed' ? cashAmt : '0')
+    formData.set('qr_amount', method === 'mixed' ? qrAmt : '0')
     formData.set('description', description)
     const res = await createMovement(formData)
     setSubmitting(false)
@@ -88,6 +129,43 @@ export function CashRegisterView() {
       queryClient.invalidateQueries({ queryKey: ['cash-movements'] })
       queryClient.invalidateQueries({ queryKey: ['cash-balance'] })
       setShowModal(false)
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  const handleTransferSubmit = async () => {
+    if (!branchId) { toast.error('Selecciona una sucursal en el menú lateral'); return }
+    if (!transferDest) { toast.error('Selecciona la sucursal destino'); return }
+    if (!transferDesc) { toast.error('Ingresa una descripción'); return }
+    if (transferMethod === 'mixed') {
+      const cash = parseFloat(transferCashAmt) || 0
+      const qr = parseFloat(transferQrAmt) || 0
+      if (cash <= 0 || qr <= 0) {
+        toast.error('En método mixto ambos montos deben ser mayor a 0'); return
+      }
+    } else if (!transferAmount || parseFloat(transferAmount) <= 0) {
+      toast.error('Ingresa un monto válido'); return
+    }
+
+    setTransferSubmitting(true)
+    const finalAmount = transferMethod === 'mixed' ? String((parseFloat(transferCashAmt) || 0) + (parseFloat(transferQrAmt) || 0)) : transferAmount
+    const formData = new FormData()
+    formData.set('origin_branch_id', branchId)
+    formData.set('destination_branch_id', transferDest)
+    formData.set('amount', finalAmount)
+    formData.set('transfer_method', transferMethod)
+    formData.set('cash_amount', transferMethod === 'mixed' ? transferCashAmt : '0')
+    formData.set('qr_amount', transferMethod === 'mixed' ? transferQrAmt : '0')
+    formData.set('description', transferDesc)
+    const res = await createCashTransfer(formData)
+    setTransferSubmitting(false)
+
+    if (res.success) {
+      toast.success('Transferencia realizada exitosamente')
+      queryClient.invalidateQueries({ queryKey: ['cash-movements'] })
+      queryClient.invalidateQueries({ queryKey: ['cash-balance'] })
+      setShowTransfer(false)
     } else {
       toast.error(res.message)
     }
@@ -131,7 +209,7 @@ export function CashRegisterView() {
       {/* Actions */}
       {branchId && (
         <Card>
-          <CardContent className="pt-4 flex gap-3">
+          <CardContent className="pt-4 flex flex-wrap gap-3">
             <Button onClick={() => openModal('manual_income')}>
               <Plus className="h-4 w-4" /> Ingreso Manual
             </Button>
@@ -140,6 +218,9 @@ export function CashRegisterView() {
             </Button>
             <Button variant="secondary" onClick={() => openModal('owner_withdrawal')}>
               <Minus className="h-4 w-4" /> Retiro Propietario
+            </Button>
+            <Button variant="default" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => { setTransferDest(''); setTransferAmount(''); setTransferMethod('cash'); setTransferCashAmt(''); setTransferQrAmt(''); setTransferDesc(''); setShowTransfer(true) }}>
+              <ArrowLeftRight className="h-4 w-4" /> Transferir
             </Button>
           </CardContent>
         </Card>
@@ -224,9 +305,9 @@ export function CashRegisterView() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal - Movimientos Manuales */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {modalType === 'manual_income' ? 'Ingreso Manual' : modalType === 'manual_expense' ? 'Egreso Manual' : 'Retiro de Propietario'}
@@ -235,15 +316,113 @@ export function CashRegisterView() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <label className="text-sm font-medium">Monto (Bs)</label>
-              <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+              <label className="text-sm font-medium">Método</label>
+              <div className="flex gap-2">
+                <Button type="button" variant={method === 'cash' ? 'default' : 'outline'} size="sm" className="flex-1 h-9 text-xs" onClick={() => setMethod('cash')}>Efectivo</Button>
+                <Button type="button" variant={method === 'qr' ? 'default' : 'outline'} size="sm" className="flex-1 h-9 text-xs" onClick={() => setMethod('qr')}>QR</Button>
+                <Button type="button" variant={method === 'mixed' ? 'default' : 'outline'} size="sm" className="flex-1 h-9 text-xs" onClick={() => setMethod('mixed')}>Mixto</Button>
+              </div>
             </div>
+            {method !== 'mixed' && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Monto (Bs)</label>
+                <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+              </div>
+            )}
+            {method === 'mixed' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Efectivo (Bs)</label>
+                    <Input type="number" step="0.01" min="0" value={cashAmt} onChange={(e) => setCashAmt(e.target.value)} placeholder="0.00" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">QR (Bs)</label>
+                    <Input type="number" step="0.01" min="0" value={qrAmt} onChange={(e) => setQrAmt(e.target.value)} placeholder="0.00" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Total</span>
+                  <span className="font-bold font-mono text-foreground">Bs {((parseFloat(cashAmt) || 0) + (parseFloat(qrAmt) || 0)).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-sm font-medium">Descripción</label>
               <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Motivo del movimiento" />
             </div>
             <Button onClick={handleSubmit} disabled={submitting} className="w-full">
               {submitting ? 'Guardando...' : 'Registrar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal - Transferencia entre Sucursales */}
+      <Dialog open={showTransfer} onOpenChange={setShowTransfer}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transferencia entre Sucursales</DialogTitle>
+            <DialogDescription>Envía dinero desde la sucursal actual a otra sucursal</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Sucursal Origen</label>
+              <Input value={branches.find(b => b.id === branchId)?.name ?? 'Actual'} disabled className="bg-muted/50" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Sucursal Destino</label>
+              <Select value={transferDest} onValueChange={(v) => { if (v) setTransferDest(v) }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar sucursal">{transferDest ? branches.find(b => b.id === transferDest)?.name : ''}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {branches
+                    .filter(b => b.id !== branchId)
+                    .map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Método de Transferencia</label>
+              <div className="flex gap-2">
+                <Button type="button" variant={transferMethod === 'cash' ? 'default' : 'outline'} size="sm" className="flex-1 h-9 text-xs" onClick={() => setTransferMethod('cash')}>Efectivo</Button>
+                <Button type="button" variant={transferMethod === 'qr' ? 'default' : 'outline'} size="sm" className="flex-1 h-9 text-xs" onClick={() => setTransferMethod('qr')}>QR</Button>
+                <Button type="button" variant={transferMethod === 'mixed' ? 'default' : 'outline'} size="sm" className="flex-1 h-9 text-xs" onClick={() => setTransferMethod('mixed')}>Mixto</Button>
+              </div>
+            </div>
+            {transferMethod !== 'mixed' && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Monto (Bs)</label>
+                <Input type="number" step="0.01" min="0.01" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} placeholder="0.00" />
+              </div>
+            )}
+            {transferMethod === 'mixed' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Efectivo (Bs)</label>
+                    <Input type="number" step="0.01" min="0" value={transferCashAmt} onChange={(e) => setTransferCashAmt(e.target.value)} placeholder="0.00" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">QR (Bs)</label>
+                    <Input type="number" step="0.01" min="0" value={transferQrAmt} onChange={(e) => setTransferQrAmt(e.target.value)} placeholder="0.00" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Total</span>
+                  <span className="font-bold font-mono text-foreground">Bs {((parseFloat(transferCashAmt) || 0) + (parseFloat(transferQrAmt) || 0)).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Descripción</label>
+              <Textarea value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} placeholder="Motivo de la transferencia" />
+            </div>
+            <Button onClick={handleTransferSubmit} disabled={transferSubmitting} className="w-full">
+              {transferSubmitting ? 'Procesando...' : 'Realizar Transferencia'}
             </Button>
           </div>
         </DialogContent>

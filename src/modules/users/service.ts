@@ -1,4 +1,6 @@
 import { createClient } from '@/shared/lib/supabase/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import {
   listAuthUsers,
   createAuthUser,
@@ -12,22 +14,39 @@ import {
 } from './repository'
 import type { UserWithAssignments } from './types'
 
+async function getAdminClient() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { cookies: { getAll() { return cookieStore.getAll() }, setAll() {} } }
+  )
+}
+
 export async function assertAdmin() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autenticado')
 
-  const { count } = await supabase
+  // Super admin por email
+  if (user.email === 'admin@gmail.com') return user
+
+  const admin = await getAdminClient()
+  const { count } = await admin
     .from('user_branches')
     .select('*', { count: 'exact', head: true })
 
   const isFirstSetup = count === 0
+  if (isFirstSetup) return user
 
-  if (isFirstSetup) {
-    return user
-  }
+  const { count: adminCount } = await admin
+    .from('user_branches')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'admin')
 
-  const { data } = await supabase
+  if (adminCount === 0) return user
+
+  const { data } = await admin
     .from('user_branches')
     .select('role')
     .eq('user_id', user.id)

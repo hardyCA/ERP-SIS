@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { Button } from '@/shared/components/ui/button'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getBrandById } from '@/modules/brands/actions'
@@ -54,7 +55,7 @@ export default function CategoryProductsPage() {
   const categoryName = categoryData?.data?.name ?? '...'
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <Breadcrumb>
         <BreadcrumbItem>
           <BreadcrumbLink render={<Link href="/brands" />}>Marcas</BreadcrumbLink>
@@ -98,6 +99,6 @@ export default function CategoryProductsPage() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

@@ -163,7 +163,7 @@ interface SaleInvoiceData {
   creditTotalPaid: number
 }
 
-export function exportSaleInvoice(data: SaleInvoiceData) {
+export function exportSaleInvoice(data: SaleInvoiceData, print = false) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pw = doc.internal.pageSize.getWidth()
   const ml = 14
@@ -313,8 +313,11 @@ export function exportSaleInvoice(data: SaleInvoiceData) {
   if (data.discount > 0) {
     obsRightItems.push({ label: 'Descuento', value: `Bs ${data.discount.toFixed(2)}` })
   }
-  if (data.paymentType === 'Crédito' || data.creditAnticipo > 0) {
-    obsRightItems.push({ label: 'Crédito', value: `Bs ${(data.total - data.creditAnticipo).toFixed(2)}` })
+  if (data.creditAnticipo > 0) {
+    obsRightItems.push({ label: 'Anticipo', value: `Bs ${data.creditAnticipo.toFixed(2)}` })
+  }
+  if (data.paymentType === 'Crédito') {
+    obsRightItems.push({ label: 'Saldo crédito', value: `Bs ${(data.total - data.creditAnticipo).toFixed(2)}` })
   }
 
   let ry = afterTable + 1
@@ -351,24 +354,42 @@ export function exportSaleInvoice(data: SaleInvoiceData) {
   doc.setTextColor(80)
   doc.text(data.paymentType.toUpperCase(), ml, sumY + 13)
 
+  let nextY = sumY + 13
+
+  if (data.creditAnticipo > 0) {
+    doc.setFontSize(6.5)
+    doc.setTextColor(80)
+    doc.text(`Anticipo: Bs ${data.creditAnticipo.toFixed(2)}`, ml + 25, nextY)
+    nextY += 3.5
+  }
+
   if (data.cashAmount > 0 && data.qrAmount > 0) {
     doc.setFontSize(6.5)
     doc.setTextColor(80)
-    doc.text(`Efectivo: Bs ${data.cashAmount.toFixed(2)}`, ml + 25, sumY + 13)
-    doc.text(`QR/Transf.: Bs ${data.qrAmount.toFixed(2)}`, ml + 25, sumY + 16.5)
+    doc.text(`Efectivo: Bs ${data.cashAmount.toFixed(2)}`, ml + 25, nextY)
+    nextY += 3.5
+    doc.text(`QR/Transf.: Bs ${data.qrAmount.toFixed(2)}`, ml + 25, nextY)
+  } else if (data.cashAmount > 0) {
+    doc.setFontSize(6.5)
+    doc.setTextColor(80)
+    doc.text(`Efectivo: Bs ${data.cashAmount.toFixed(2)}`, ml + 25, nextY)
+  } else if (data.qrAmount > 0) {
+    doc.setFontSize(6.5)
+    doc.setTextColor(80)
+    doc.text(`QR/Transf.: Bs ${data.qrAmount.toFixed(2)}`, ml + 25, nextY)
   }
 
   doc.setFontSize(16)
   setBold()
   doc.setTextColor(0)
-  doc.text(`Bs ${data.total.toFixed(2)}`, rightX, sumY + 2, { align: 'right' })
+  doc.text(`Bs ${data.total.toFixed(2)}`, rightX, sumY + 5, { align: 'right' })
 
   doc.setFontSize(7)
   setNormal()
   doc.setTextColor(80)
-  doc.text(`Cajero: ${data.seller}`, rightX, sumY + 8, { align: 'right' })
+  doc.text(`Cajero: ${data.seller}`, rightX, sumY + 11, { align: 'right' })
 
-  const sumEndY = sumY + 16
+  const sumEndY = sumY + 19
 
   // === CREDIT DETAIL ===
   if (data.paymentType === 'Crédito' && data.creditPayments.length > 0) {
@@ -432,7 +453,11 @@ export function exportSaleInvoice(data: SaleInvoiceData) {
     doc.text(`SALDO ACTUAL: Bs ${data.creditBalance.toFixed(2)}`, rightX, afterCredit, { align: 'right' })
   }
 
-  doc.save(`venta-${data.number}.pdf`)
+  if (print) {
+    doc.output('dataurlnewwindow')
+  } else {
+    doc.save(`venta-${data.number}.pdf`)
+  }
 }
 
 interface PurchasePdfData {
@@ -447,7 +472,7 @@ interface PurchasePdfData {
   notes: string | null
 }
 
-export function exportPurchasePdf(data: PurchasePdfData) {
+export function exportPurchasePdf(data: PurchasePdfData, showCost = true) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pw = doc.internal.pageSize.getWidth()
   const ml = 14
@@ -509,16 +534,35 @@ export function exportPurchasePdf(data: PurchasePdfData) {
 
   const tableStartY = infoY + 12
 
+  const headRow = showCost
+    ? ['Nombre', 'Cantidad', 'Costo Unit.', 'Subtotal']
+    : ['Nombre', 'Cantidad']
+
+  const bodyRows = showCost
+    ? data.items.map((i) => [
+        i.product_name,
+        String(i.quantity),
+        `Bs ${i.unit_cost.toFixed(2)}`,
+        `Bs ${i.subtotal.toFixed(2)}`,
+      ])
+    : data.items.map((i) => [
+        i.product_name,
+        String(i.quantity),
+      ])
+
+  const footRow = showCost
+    ? ['', '', 'TOTAL', `Bs ${data.total.toFixed(2)}`]
+    : ['', `TOTAL: Bs ${data.total.toFixed(2)}`]
+
+  const colStyles: Record<string, { halign: 'left' | 'center' | 'right' | 'justify' }> = showCost
+    ? { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+    : { 1: { halign: 'right' } }
+
   autoTable(doc, {
     startY: tableStartY,
-    head: [['Nombre', 'Cantidad', 'Costo Unit.', 'Subtotal']],
-    body: data.items.map((i) => [
-      i.product_name,
-      String(i.quantity),
-      `Bs ${i.unit_cost.toFixed(2)}`,
-      `Bs ${i.subtotal.toFixed(2)}`,
-    ]),
-    foot: [['', '', 'TOTAL', `Bs ${data.total.toFixed(2)}`]],
+    head: [headRow],
+    body: bodyRows,
+    foot: [footRow],
     styles: {
       fontSize: 7.5,
       cellPadding: 1.5,
@@ -541,11 +585,7 @@ export function exportPurchasePdf(data: PurchasePdfData) {
       halign: 'right',
       cellPadding: 2,
     },
-    columnStyles: {
-      1: { halign: 'center' },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-    },
+    columnStyles: colStyles,
     tableLineColor: [0, 0, 0],
     tableLineWidth: 0.3,
   })

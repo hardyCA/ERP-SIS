@@ -40,7 +40,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8 max-w-2xl">
+    <div className="space-y-8 max-w-2xl">
       <PageHeader title="Mi Perfil" description="Administra tu cuenta y contraseña" />
 
       <Card>

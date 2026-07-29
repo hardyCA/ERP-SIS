@@ -35,6 +35,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - [x] Admin puede restablecer contraseña de usuarios desde /users/[id]
 - [x] Usuario puede cambiar su propia contraseña desde /profile
 - [x] Módulo Reports completo (dashboard KPIs, reportes ventas/inventario/caja/créditos)
+- [x] Transferencias de efectivo entre sucursales desde Caja (método: Efectivo/QR/Mixto)
 
 ### 🔜 Próximos pasos
 - Página /auth/callback + recover password (flujo de email)

@@ -1,4 +1,5 @@
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { Button } from '@/shared/components/ui/button'
 import { BranchList } from '@/modules/branches/components/branch-list'
 import Link from 'next/link'
@@ -6,7 +7,7 @@ import { Plus } from 'lucide-react'
 
 export default function BranchesPage() {
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <PageHeader
         title="Sucursales"
         description="Administra las sucursales del negocio"
@@ -18,6 +19,6 @@ export default function BranchesPage() {
         }
       />
       <BranchList />
-    </div>
+    </PageContainer>
   )
 }

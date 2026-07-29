@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { InventoryList } from '@/modules/inventory/components/inventory-list'
 import { InventoryAdjustForm } from '@/modules/inventory/components/inventory-adjust-form'
 import { useBranch } from '@/shared/contexts/branch-context'
@@ -42,7 +43,7 @@ export default function InventoryPage() {
   const { data: brandsResult } = useQuery({
     queryKey: ['brands'],
     queryFn: getBrands,
-    staleTime: 60000,
+    staleTime: 0,
   })
   const brands = (brandsResult?.success ? brandsResult.data : []) as Array<{ id: string; name: string }>
 
@@ -51,7 +52,7 @@ export default function InventoryPage() {
     queryKey: ['categories', effectiveBrandId],
     queryFn: () => getCategoriesByBrand(effectiveBrandId),
     enabled: !!effectiveBrandId,
-    staleTime: 60000,
+    staleTime: 0,
   })
   const categories = (categoriesResult?.success ? categoriesResult.data : []) as Array<{ id: string; name: string }>
 
@@ -75,8 +76,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 sm:p-6 lg:p-8">
-      {/* Page Header */}
+    <PageContainer>
       <PageHeader
         title="Inventario"
         description="Gestiona el stock y precios por sucursal"
@@ -194,6 +194,6 @@ export default function InventoryPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

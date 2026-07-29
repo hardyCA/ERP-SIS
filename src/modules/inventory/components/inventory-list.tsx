@@ -262,6 +262,12 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                     </Badge>
                   </div>
 
+                  {showCost && (
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium">Costo Base</span>
+                      <span className="font-mono font-semibold">Bs {Number((product?.cost as number) ?? 0).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs">
                     <div className="space-y-0.5">
                       <span className="text-[10px] text-muted-foreground block uppercase font-medium">Precio Venta</span>

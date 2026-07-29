@@ -16,7 +16,7 @@ export function BrandSwitcher({ currentBrandId, className }: BrandSwitcherProps)
   const { data: result, isLoading } = useQuery({
     queryKey: ['brands'],
     queryFn: getBrands,
-    staleTime: 30000,
+    staleTime: 0,
   })
 
   const brands = (result?.success ? result.data : []) as Brands[]

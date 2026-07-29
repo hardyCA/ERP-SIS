@@ -25,7 +25,9 @@ export enum CashMovementType {
   CreditPayment = 'credit_payment',
   ManualIncome = 'manual_income',
   ManualExpense = 'manual_expense',
-  OwnerWithdrawal = 'owner_withdrawal'
+  OwnerWithdrawal = 'owner_withdrawal',
+  CashTransferOut = 'cash_transfer_out',
+  CashTransferIn = 'cash_transfer_in'
 }
 
 export enum CodeChallengeMethod {
@@ -193,6 +195,7 @@ export interface Purchases {
   number: number
   total: number
   notes?: string
+  status: string
   created_by?: string
   created_at: string
   updated_at: string
@@ -250,6 +253,19 @@ export interface Customers {
   id: string
   name: string
   phone?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MenuItems {
+  id: string
+  group_title: string
+  name: string
+  href: string
+  icon: string
+  sort_order: number
+  is_active: boolean
+  required_role: string | null
   created_at: string
   updated_at: string
 }
@@ -342,6 +358,11 @@ export type Database = {
         Row: Sales
         Insert: Partial<Sales>
         Update: Partial<Sales>
+      }
+      menu_items: {
+        Row: MenuItems
+        Insert: Partial<MenuItems>
+        Update: Partial<MenuItems>
       }
       transfer_items: {
         Row: TransferItems

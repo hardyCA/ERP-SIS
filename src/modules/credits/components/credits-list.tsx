@@ -52,7 +52,7 @@ export function CreditsList() {
   const { data, isLoading } = useQuery({
     queryKey: ['credits'],
     queryFn: () => getCredits(),
-    staleTime: 10000,
+    staleTime: 0,
   })
 
   const credits = data?.success ? (data.data ?? []) : []

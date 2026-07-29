@@ -1,11 +1,12 @@
 import { PageHeader } from '@/shared/components/page-header'
+import { PageContainer } from '@/shared/components/page-container'
 import { CashRegisterView } from '@/modules/cash-register/components/cash-register-view'
 
 export default function CashRegisterPage() {
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <PageContainer>
       <PageHeader title="Caja" description="Movimientos y saldo de caja por sucursal" />
       <CashRegisterView />
-    </div>
+    </PageContainer>
   )
 }

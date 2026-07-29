@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { useShowCost } from '@/shared/lib/use-role'
 import { Package, Send, Check, X, ArrowLeft } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -35,6 +36,7 @@ interface TransferDetailProps {
 export function TransferDetail({ transferId }: TransferDetailProps) {
   const queryClient = useQueryClient()
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const showCost = useShowCost()
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['transfer', transferId],
@@ -160,7 +162,7 @@ export function TransferDetail({ transferId }: TransferDetailProps) {
                   <TableHead />
                   <TableHead>Producto</TableHead>
                   <TableHead>Cantidad</TableHead>
-                  <TableHead>Costo Unit.</TableHead>
+                  {showCost && <TableHead>Costo Unit.</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -175,7 +177,7 @@ export function TransferDetail({ transferId }: TransferDetailProps) {
                     </TableCell>
                     <TableCell className="font-medium">{item.products?.name ?? '—'}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
-                    <TableCell>Bs {Number(item.unit_cost).toFixed(2)}</TableCell>
+                    {showCost && <TableCell>Bs {Number(item.unit_cost).toFixed(2)}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>

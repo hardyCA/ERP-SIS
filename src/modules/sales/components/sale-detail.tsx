@@ -54,7 +54,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 import { cn } from '@/shared/lib/utils'
-import { exportSaleInvoice, printElement } from '@/shared/lib/export'
+import { exportSaleInvoice } from '@/shared/lib/export'
 
 const paymentLabels: Record<string, string> = {
   cash: 'Efectivo',
@@ -172,7 +172,58 @@ export function SaleDetail({ saleId }: SaleDetailProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => printElement('sale-detail')}>
+            onClick={() => {
+              const ptLabel = paymentLabels[pt] ?? pt
+              const branchesData = sale.branches as Record<string, unknown> | undefined
+              const customersData = sale.customers as Record<string, unknown> | undefined
+              const saleCredits = (sale.sale_credits as Array<Record<string, unknown>>) || []
+              const allPayments: Array<{ date: string; time: string; amount: number; balance: number }> = []
+              let totalPaid = 0
+              let currentBalance = 0
+              saleCredits.forEach((cr) => {
+                currentBalance += Number(cr.balance || 0)
+                const pays = (cr.payments as Array<Record<string, unknown>>) || []
+                let runningBalance = Number(cr.total || 0)
+                pays.forEach((p) => {
+                  const d = new Date(p.created_at as string)
+                  totalPaid += Number(p.amount || 0)
+                  runningBalance -= Number(p.amount || 0)
+                  allPayments.push({
+                    date: d.toLocaleDateString(),
+                    time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    amount: Number(p.amount || 0),
+                    balance: runningBalance,
+                  })
+                })
+              })
+              exportSaleInvoice({
+                number: saleNumber,
+                date: new Date(sale.created_at).toLocaleDateString(),
+                time: new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                branch: (branchesData?.name as string) ?? '—',
+                branchAddress: (branchesData?.address as string) ?? '',
+                branchPhone: (branchesData?.phone as string) ?? '',
+                customer: (customersData?.name as string) ?? sale.customer_name ?? '—',
+                customerPhone: (customersData?.phone as string) ?? sale.customer_phone ?? '',
+                seller: sale.created_by_name ?? '—',
+                paymentType: ptLabel,
+                total: Number(sale.total),
+                discount: Number(sale.discount || 0),
+                cashAmount: Number(sale.cash_amount || 0),
+                qrAmount: Number(sale.qr_amount || 0),
+                creditAnticipo: Number(sale.credit_anticipo || 0),
+                notes: sale.notes as string | null,
+                items: (sale.items ?? []).map((i: { products: { name: string } | null; quantity: number; price: number; subtotal: number }) => ({
+                  product_name: i.products?.name ?? '—',
+                  quantity: i.quantity,
+                  price: Number(i.price),
+                  subtotal: Number(i.subtotal),
+                })),
+                creditPayments: allPayments,
+                creditBalance: currentBalance,
+                creditTotalPaid: totalPaid,
+              }, true)
+            }}>
             <Printer className="h-3.5 w-3.5 mr-1.5" /> Imprimir
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
