@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/shared/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { z } from 'zod'
+import { assertAdmin } from '@/modules/users/service'
 import { createSaleSchema } from './types'
 import type { ActionResponse } from './types'
 
@@ -327,6 +329,9 @@ export async function createSale(formData: FormData): Promise<ActionResponse> {
         branch_id: validated.data.branch_id,
         type: 'cash_sale',
         amount: cashAmt,
+        payment_method: 'cash',
+        cash_amount: cashAmt,
+        qr_amount: 0,
         reference_type: 'sale',
         reference_id: sale.id,
         description: validated.data.payment_type === 'credit'
@@ -341,6 +346,9 @@ export async function createSale(formData: FormData): Promise<ActionResponse> {
         branch_id: validated.data.branch_id,
         type: 'manual_income',
         amount: qrAmt,
+        payment_method: 'qr',
+        cash_amount: 0,
+        qr_amount: qrAmt,
         reference_type: 'sale',
         reference_id: sale.id,
         description: `Venta #${sale.number} - QR`,
@@ -362,6 +370,31 @@ export async function createSale(formData: FormData): Promise<ActionResponse> {
 
     revalidatePath('/sales')
     return { success: true, message: 'Venta registrada exitosamente', data: sale }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function deleteSale(formData: FormData): Promise<ActionResponse> {
+  try {
+    const saleId = formData.get('sale_id') as string
+    const validated = z.string().uuid('ID de venta inválido').safeParse(saleId)
+    if (!validated.success) {
+      return { success: false, message: 'ID de venta inválido' }
+    }
+
+    await assertAdmin()
+
+    const supabase = await createClient()
+    const { error } = await supabase.rpc('delete_sale', { p_sale_id: validated.data })
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    revalidatePath('/sales')
+    revalidatePath('/cash-register')
+    revalidatePath('/credits')
+    return { success: true, message: 'Venta eliminada correctamente' }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }

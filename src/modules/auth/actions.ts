@@ -2,7 +2,7 @@
 
 import { createClient } from '@/shared/lib/supabase/actions'
 import { revalidatePath } from 'next/cache'
-import { loginSchema, registerSchema, recoverSchema, changePasswordSchema } from './types'
+import { loginSchema, changePasswordSchema } from './types'
 import type { ActionResponse } from './types'
 
 export async function loginUser(formData: FormData): Promise<ActionResponse> {
@@ -28,35 +28,6 @@ export async function loginUser(formData: FormData): Promise<ActionResponse> {
 
   revalidatePath('/', 'layout')
   return { success: true, message: 'Inicio de sesión exitoso' }
-}
-
-export async function registerUser(formData: FormData): Promise<ActionResponse> {
-  const supabase = await createClient()
-
-  const validated = registerSchema.safeParse({
-    email: formData.get('email'),
-    password: formData.get('password'),
-    confirmPassword: formData.get('confirmPassword'),
-  })
-
-  if (!validated.success) {
-    return {
-      success: false,
-      message: 'Datos inválidos',
-      errors: validated.error.flatten().fieldErrors,
-    }
-  }
-
-  const { error } = await supabase.auth.signUp({
-    email: validated.data.email,
-    password: validated.data.password,
-  })
-
-  if (error) {
-    return { success: false, message: error.message }
-  }
-
-  return { success: true, message: 'Usuario registrado exitosamente' }
 }
 
 export async function updateMyPassword(formData: FormData): Promise<ActionResponse> {
@@ -97,29 +68,4 @@ export async function logoutUser(): Promise<ActionResponse> {
   await supabase.auth.signOut()
   revalidatePath('/', 'layout')
   return { success: true, message: 'Sesión cerrada' }
-}
-
-export async function recoverPassword(formData: FormData): Promise<ActionResponse> {
-  const supabase = await createClient()
-
-  const validated = recoverSchema.safeParse({
-    email: formData.get('email'),
-  })
-
-  if (!validated.success) {
-    return { success: false, message: 'Email inválido' }
-  }
-
-  const { error } = await supabase.auth.resetPasswordForEmail(
-    validated.data.email,
-    {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/update-password`,
-    }
-  )
-
-  if (error) {
-    return { success: false, message: error.message }
-  }
-
-  return { success: true, message: 'Revisa tu email para restablecer la contraseña' }
 }

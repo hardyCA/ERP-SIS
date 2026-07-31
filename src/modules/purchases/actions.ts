@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/shared/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { z } from 'zod'
+import { assertAdmin, assertAdminOrManager } from '@/modules/users/service'
 import { createPurchaseSchema } from './types'
 import type { ActionResponse } from './types'
-import type { Branches, Products, InventoryItems } from '@/shared/types/database.types'
+import type { Branches, Products } from '@/shared/types/database.types'
 
 async function getAdminClient() {
   const cookieStore = await cookies()
@@ -70,7 +72,7 @@ export async function getPurchaseById(id: string) {
     const supabase = await createClient()
     const { data: purchase, error } = await supabase
       .from('purchases')
-      .select('*, branches(name, address, phone), suppliers(name, document_id)')
+      .select('*, branches(name, address, phone), suppliers(id, name, document_id)')
       .eq('id', id)
       .single()
     if (error) throw new Error(error.message)
@@ -199,83 +201,76 @@ export async function createPurchase(formData: FormData): Promise<ActionResponse
   }
 }
 
-export async function approvePurchase(id: string): Promise<ActionResponse> {
+export async function updatePurchase(formData: FormData): Promise<ActionResponse> {
   try {
-    const supabase = await createClient()
+    const purchase_id = formData.get('purchase_id') as string
+    const branch_id = formData.get('branch_id') as string
+    const supplier_id = formData.get('supplier_id') as string
+    const notes = formData.get('notes') as string
 
-    const { data: purchase, error: fetchError } = await supabase
-      .from('purchases')
-      .select('*, purchase_items(product_id, quantity, unit_cost)')
-      .eq('id', id)
-      .single()
-    if (fetchError) throw new Error(fetchError.message)
-    if (!purchase) throw new Error('Compra no encontrada')
-    if (purchase.status !== 'pending') throw new Error('Solo se pueden aprobar compras pendientes')
-    if (!purchase.branch_id) throw new Error('La compra no tiene sucursal asignada')
+    const itemsJson = formData.get('items') as string
+    let items: Array<{ product_id: string; quantity: number; unit_cost: number }> = []
+    try { items = JSON.parse(itemsJson) } catch { return { success: false, message: 'Error al procesar los productos' } }
 
-    const items = (purchase as Record<string, unknown>).purchase_items as Array<{ product_id: string; quantity: number; unit_cost: number }>
+    const expensesJson = formData.get('expenses') as string
+    let expenses: Array<{ description: string; cost: number }> = []
+    try { if (expensesJson) expenses = JSON.parse(expensesJson) } catch {}
 
-    for (const item of items) {
-      const { data: existing } = await supabase
-        .from('inventory_items')
-        .select('id, quantity')
-        .eq('product_id', item.product_id)
-        .eq('branch_id', purchase.branch_id)
-        .single()
+    const pid = z.string().uuid('ID de compra inválido').safeParse(purchase_id)
+    if (!pid.success) {
+      return { success: false, message: 'ID de compra inválido' }
+    }
 
-      if (existing) {
-        await supabase
-          .from('inventory_items')
-          .update({ quantity: existing.quantity + item.quantity })
-          .eq('id', existing.id)
-      } else {
-        await supabase
-          .from('inventory_items')
-          .insert({
-            product_id: item.product_id,
-            branch_id: purchase.branch_id,
-            quantity: item.quantity,
-            sale_price: 0,
-          })
-      }
-
-      const { data: invAll } = await supabase
-        .from('inventory_items')
-        .select('quantity')
-        .eq('product_id', item.product_id)
-
-      if (invAll) {
-        const stockTotal = invAll.reduce((sum, i) => sum + i.quantity, 0)
-        const stockAnterior = stockTotal - item.quantity
-
-        const { data: productData } = await supabase
-          .from('products')
-          .select('cost')
-          .eq('id', item.product_id)
-          .single()
-
-        if (productData) {
-          const costoAnterior = Number(productData.cost)
-          const nuevoCosto = stockAnterior > 0
-            ? (stockAnterior * costoAnterior + item.quantity * item.unit_cost) / stockTotal
-            : item.unit_cost
-
-          await supabase
-            .from('products')
-            .update({ cost: Math.round(nuevoCosto * 100) / 100 })
-            .eq('id', item.product_id)
-        }
+    const validated = createPurchaseSchema.safeParse({ branch_id, supplier_id, notes, items, expenses })
+    if (!validated.success) {
+      return {
+        success: false,
+        message: 'Datos inválidos',
+        errors: validated.error.flatten().fieldErrors,
       }
     }
 
-    const { error: updateError } = await supabase
-      .from('purchases')
-      .update({ status: 'approved' })
-      .eq('id', id)
-    if (updateError) throw new Error(updateError.message)
+    await assertAdminOrManager()
+
+    const supabase = await createClient()
+    const { error } = await supabase.rpc('update_purchase', {
+      p_purchase_id: pid.data,
+      p_branch_id: validated.data.branch_id,
+      p_supplier_id: validated.data.supplier_id || null,
+      p_notes: validated.data.notes || null,
+      p_items: validated.data.items,
+      p_expenses: validated.data.expenses ?? [],
+    })
+    if (error) {
+      throw new Error(error.message)
+    }
 
     revalidatePath('/purchases')
-    revalidatePath(`/purchases/${id}`)
+    revalidatePath(`/purchases/${pid.data}`)
+    return { success: true, message: 'Compra actualizada exitosamente', data: { id: pid.data } }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function approvePurchase(id: string): Promise<ActionResponse> {
+  try {
+    const validated = z.string().uuid('ID de compra inválido').safeParse(id)
+    if (!validated.success) {
+      return { success: false, message: 'ID de compra inválido' }
+    }
+
+    await assertAdminOrManager()
+
+    const supabase = await createClient()
+    const { error } = await supabase.rpc('approve_purchase', { p_purchase_id: validated.data })
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    revalidatePath('/purchases')
+    revalidatePath(`/purchases/${validated.data}`)
+    revalidatePath('/inventory')
     return { success: true, message: 'Compra aprobada exitosamente' }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
@@ -284,25 +279,46 @@ export async function approvePurchase(id: string): Promise<ActionResponse> {
 
 export async function cancelPurchase(id: string): Promise<ActionResponse> {
   try {
+    const validated = z.string().uuid('ID de compra inválido').safeParse(id)
+    if (!validated.success) {
+      return { success: false, message: 'ID de compra inválido' }
+    }
+
+    await assertAdminOrManager()
+
     const supabase = await createClient()
-
-    const { data: purchase } = await supabase
-      .from('purchases')
-      .select('status')
-      .eq('id', id)
-      .single()
-    if (!purchase) throw new Error('Compra no encontrada')
-    if (purchase.status !== 'pending') throw new Error('Solo se pueden cancelar compras pendientes')
-
-    const { error } = await supabase
-      .from('purchases')
-      .update({ status: 'cancelled' })
-      .eq('id', id)
-    if (error) throw new Error(error.message)
+    const { error } = await supabase.rpc('cancel_purchase', { p_purchase_id: validated.data })
+    if (error) {
+      throw new Error(error.message)
+    }
 
     revalidatePath('/purchases')
-    revalidatePath(`/purchases/${id}`)
+    revalidatePath(`/purchases/${validated.data}`)
     return { success: true, message: 'Compra cancelada' }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function deletePurchase(formData: FormData): Promise<ActionResponse> {
+  try {
+    const purchaseId = formData.get('purchase_id') as string
+    const validated = z.string().uuid('ID de compra inválido').safeParse(purchaseId)
+    if (!validated.success) {
+      return { success: false, message: 'ID de compra inválido' }
+    }
+
+    await assertAdmin()
+
+    const supabase = await createClient()
+    const { error } = await supabase.rpc('delete_purchase', { p_purchase_id: validated.data })
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    revalidatePath('/purchases')
+    revalidatePath('/inventory')
+    return { success: true, message: 'Compra eliminada correctamente' }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }

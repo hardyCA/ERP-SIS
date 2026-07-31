@@ -11,7 +11,7 @@ import {
   Card,
   CardContent,
 } from '@/shared/components/ui/card'
-import { Pencil, Trash2, Search, Users, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Pencil, Trash2, Search, Users, Phone, MapPin, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ConfirmDialog } from '@/shared/components/confirm-dialog'
 import type { Customers } from '@/shared/types/database.types'
 
@@ -53,7 +53,9 @@ export function CustomerList({ onEdit }: CustomerListProps) {
     const q = searchQuery.toLowerCase()
     return items.filter(c =>
       c.name.toLowerCase().includes(q) ||
-      (c.phone && c.phone.toLowerCase().includes(q))
+      (c.phone && c.phone.toLowerCase().includes(q)) ||
+      (c.document_id && c.document_id.toLowerCase().includes(q)) ||
+      (c.address && c.address.toLowerCase().includes(q))
     )
   }, [items, searchQuery])
 
@@ -100,12 +102,26 @@ export function CustomerList({ onEdit }: CustomerListProps) {
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{customer.name}</p>
-                  {customer.phone && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                      <Phone className="h-3 w-3" />
-                      {customer.phone}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-0.5">
+                    {customer.document_id && (
+                      <span className="flex items-center gap-1">
+                        <IdCard className="h-3 w-3" />
+                        {customer.document_id}
+                      </span>
+                    )}
+                    {customer.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {customer.phone}
+                      </span>
+                    )}
+                    {customer.address && (
+                      <span className="flex items-center gap-1 truncate">
+                        <MapPin className="h-3 w-3" />
+                        {customer.address}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 

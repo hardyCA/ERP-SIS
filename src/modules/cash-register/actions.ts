@@ -65,7 +65,7 @@ export async function getBalance(branchId?: string) {
     const supabase = await createClient()
     let query = supabase
       .from('cash_register_movements')
-      .select('type, amount')
+      .select('type, amount, cash_amount, qr_amount')
     if (branchId) query = query.eq('branch_id', branchId)
 
     const { data, error } = await query
@@ -83,14 +83,46 @@ export async function getBalance(branchId?: string) {
 
     const balance = (data ?? []).reduce((sum, m) => sum + ((typeSign[m.type] ?? 0) * Number(m.amount)), 0)
 
-    const totals = (data ?? []).reduce((acc, m) => {
-      const sign = typeSign[m.type] ?? 0
-      if (sign > 0) acc.income += Number(m.amount)
-      else if (sign < 0) acc.expense += Number(m.amount)
-      return acc
-    }, { income: 0, expense: 0 })
+    let cashBalance = 0
+    let qrBalance = 0
+    let income = 0
+    let expense = 0
+    let incomeCash = 0
+    let incomeQr = 0
+    let expenseCash = 0
+    let expenseQr = 0
 
-    return { success: true, data: { balance, income: totals.income, expense: totals.expense } }
+    for (const m of data ?? []) {
+      const sign = typeSign[m.type] ?? 0
+      const cashPart = Number(m.cash_amount ?? 0)
+      const qrPart = Number(m.qr_amount ?? 0)
+      cashBalance += sign * cashPart
+      qrBalance += sign * qrPart
+      if (sign > 0) {
+        income += Number(m.amount)
+        incomeCash += cashPart
+        incomeQr += qrPart
+      } else if (sign < 0) {
+        expense += Number(m.amount)
+        expenseCash += cashPart
+        expenseQr += qrPart
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        balance,
+        income,
+        expense,
+        cashBalance,
+        qrBalance,
+        incomeCash,
+        incomeQr,
+        expenseCash,
+        expenseQr,
+      },
+    }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -127,10 +159,19 @@ export async function createMovement(formData: FormData): Promise<ActionResponse
 
     const desc = `${typeLabels[validated.data.type] ?? validated.data.type} - ${methodDetail}${description ? ` - ${description}` : ''}`
 
+    let cashPart = 0
+    let qrPart = 0
+    if (method === 'cash') cashPart = validated.data.amount
+    else if (method === 'qr') qrPart = validated.data.amount
+    else { cashPart = validated.data.cash_amount; qrPart = validated.data.qr_amount }
+
     const { error } = await supabase.from('cash_register_movements').insert({
       branch_id: validated.data.branch_id,
       type: validated.data.type,
       amount: validated.data.amount,
+      payment_method: method,
+      cash_amount: cashPart,
+      qr_amount: qrPart,
       description: desc,
       created_by: user?.id,
     })
@@ -148,7 +189,7 @@ export async function getBranchBalance(branchId: string) {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('cash_register_movements')
-      .select('type, amount')
+      .select('type, amount, cash_amount, qr_amount')
       .eq('branch_id', branchId)
     if (error) throw new Error(error.message)
 
@@ -163,7 +204,16 @@ export async function getBranchBalance(branchId: string) {
     }
 
     const balance = (data ?? []).reduce((sum, m) => sum + ((typeSign[m.type] ?? 0) * Number(m.amount)), 0)
-    return { success: true, data: { balance } }
+
+    let cashBalance = 0
+    let qrBalance = 0
+    for (const m of data ?? []) {
+      const sign = typeSign[m.type] ?? 0
+      cashBalance += sign * Number(m.cash_amount ?? 0)
+      qrBalance += sign * Number(m.qr_amount ?? 0)
+    }
+
+    return { success: true, data: { balance, cashBalance, qrBalance } }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -226,6 +276,12 @@ export async function createCashTransfer(formData: FormData): Promise<ActionResp
       ? `Efectivo Bs ${validated.data.cash_amount.toFixed(2)} + QR Bs ${validated.data.qr_amount.toFixed(2)}`
       : methodLabels[method] ?? method
 
+    let cashPart = 0
+    let qrPart = 0
+    if (method === 'cash') cashPart = validated.data.amount
+    else if (method === 'qr') qrPart = validated.data.amount
+    else { cashPart = validated.data.cash_amount; qrPart = validated.data.qr_amount }
+
     const outDesc = `Transferencia a: ${destName} - ${methodDetail}${description ? ` - ${description}` : ''}`
     const inDesc = `Transferencia desde: ${originName} - ${methodDetail}${description ? ` - ${description}` : ''}`
 
@@ -235,6 +291,9 @@ export async function createCashTransfer(formData: FormData): Promise<ActionResp
       branch_id: validated.data.origin_branch_id,
       type: 'cash_transfer_out',
       amount: validated.data.amount,
+      payment_method: method,
+      cash_amount: cashPart,
+      qr_amount: qrPart,
       description: outDesc,
       reference_type: 'cash_transfer',
       reference_id: transferId,
@@ -246,6 +305,9 @@ export async function createCashTransfer(formData: FormData): Promise<ActionResp
       branch_id: validated.data.destination_branch_id,
       type: 'cash_transfer_in',
       amount: validated.data.amount,
+      payment_method: method,
+      cash_amount: cashPart,
+      qr_amount: qrPart,
       description: inDesc,
       reference_type: 'cash_transfer',
       reference_id: transferId,

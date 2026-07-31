@@ -40,18 +40,30 @@ export function CustomerForm({ customerId, onSuccess, onCancel }: CustomerFormPr
   const form = useForm<CustomerInput>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(customerSchema) as any,
-    defaultValues: { name: '', phone: '' },
-    values: customer ? { name: customer.name, phone: customer.phone ?? '' } : undefined,
+    defaultValues: { name: '', phone: '', document_id: '', address: '' },
+    values: customer ? {
+      name: customer.name,
+      phone: customer.phone ?? '',
+      document_id: customer.document_id ?? '',
+      address: customer.address ?? '',
+    } : undefined,
   })
 
   useEffect(() => {
-    if (customer) form.reset({ name: customer.name, phone: customer.phone ?? '' })
+    if (customer) form.reset({
+      name: customer.name,
+      phone: customer.phone ?? '',
+      document_id: customer.document_id ?? '',
+      address: customer.address ?? '',
+    })
   }, [customer, form])
 
   const onSubmit = async (data: CustomerInput) => {
     const formData = new FormData()
     formData.set('name', data.name)
     formData.set('phone', data.phone ?? '')
+    formData.set('document_id', data.document_id ?? '')
+    formData.set('address', data.address ?? '')
     const result = isEditing
       ? await updateCustomer(customerId, formData)
       : await createCustomer(formData)
@@ -87,6 +99,32 @@ export function CustomerForm({ customerId, onSuccess, onCancel }: CustomerFormPr
               <FormLabel>Teléfono</FormLabel>
               <FormControl>
                 <Input placeholder="Número de teléfono (opcional)" {...field} value={field.value ?? ''} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="document_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Cédula / ID</FormLabel>
+              <FormControl>
+                <Input placeholder="Cédula o documento (opcional)" {...field} value={field.value ?? ''} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="address"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Dirección</FormLabel>
+              <FormControl>
+                <Input placeholder="Dirección del cliente (opcional)" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>

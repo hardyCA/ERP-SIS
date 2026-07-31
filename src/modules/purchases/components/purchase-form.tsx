@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { getBrands } from '@/modules/brands/actions'
 import { getCategoriesByBrand } from '@/modules/categories/actions'
 import { getProductsByCategory } from '@/modules/products/actions'
-import { createPurchase } from '../actions'
+import { createPurchase, getPurchaseById, updatePurchase } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -36,16 +36,110 @@ interface ProductToAdd {
   cost: number
 }
 
-export function PurchaseForm() {
+export function PurchaseForm({ purchaseId }: { purchaseId?: string }) {
+  const isEditing = !!purchaseId
+
+  const { data: purchaseData, isPending: purchaseLoading } = useQuery({
+    queryKey: ['purchase', purchaseId],
+    queryFn: () => getPurchaseById(purchaseId!),
+    enabled: isEditing,
+    staleTime: 0,
+  })
+
+  const purchase = purchaseData?.success ? purchaseData.data : null
+
+  if (isEditing && purchaseLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">Cargando compra...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isEditing && !purchase) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">No se pudo cargar la compra. Intenta nuevamente.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isEditing && purchase && purchase.status !== 'pending') {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border bg-card p-8 text-center">
+          <p className="text-sm font-medium">Esta compra ya no se puede editar</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Solo se pueden modificar compras en estado pendiente.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const loadedItems = (purchase?.items ?? []) as Array<{
+    product_id: string
+    quantity: number
+    unit_cost: number
+    products: { name: string | null; image_url: string | null } | null
+  }>
+  const loadedExpenses = (purchase?.expenses ?? []) as Array<{ description: string; cost: number }>
+
+  return (
+    <PurchaseFormInner
+      key={purchase?.id ?? 'new'}
+      purchaseId={purchaseId}
+      isEditing={isEditing}
+      initialBranchId={purchase?.branch_id}
+      initialSupplier={purchase?.suppliers ? { id: purchase.suppliers.id, name: purchase.suppliers.name } : null}
+      initialNotes={purchase?.notes ?? ''}
+      initialItems={loadedItems.map(it => ({
+        product_id: it.product_id,
+        product_name: it.products?.name ?? 'Producto',
+        image_url: it.products?.image_url ?? null,
+        quantity: it.quantity,
+        unit_cost: Number(it.unit_cost) || 0,
+      }))}
+      initialExpenses={loadedExpenses.map(e => ({
+        description: e.description,
+        cost: String(e.cost ?? 0),
+      }))}
+    />
+  )
+}
+
+function PurchaseFormInner({
+  purchaseId,
+  isEditing,
+  initialBranchId,
+  initialSupplier,
+  initialNotes,
+  initialItems,
+  initialExpenses,
+}: {
+  purchaseId?: string
+  isEditing: boolean
+  initialBranchId?: string
+  initialSupplier: { id: string; name: string } | null
+  initialNotes: string
+  initialItems: LineItem[]
+  initialExpenses: Array<{ description: string; cost: string }>
+}) {
   const router = useRouter()
   const { branchId } = useBranch()
-  const [notes, setNotes] = useState('')
-  const [supplier, setSupplier] = useState<{ id: string; name: string } | null>(null)
-  const [items, setItems] = useState<LineItem[]>([])
-  const [expenses, setExpenses] = useState<Array<{ description: string; cost: string }>>([])
+  const [notes, setNotes] = useState(initialNotes)
+  const [supplier, setSupplier] = useState(initialSupplier)
+  const [items, setItems] = useState(initialItems)
+  const [expenses, setExpenses] = useState(initialExpenses)
   const [submitting, setSubmitting] = useState(false)
   const [pendingQty, setPendingQty] = useState<Record<string, string>>({})
   const [pendingCost, setPendingCost] = useState<Record<string, string>>({})
+
+  const effectiveBranchId = initialBranchId ?? branchId
 
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -117,13 +211,14 @@ export function PurchaseForm() {
   const total = totalProductos + totalGastos
 
   const handleSubmit = async () => {
-    if (!branchId) { toast.error('Selecciona una sucursal en el menú lateral'); return }
+    if (!effectiveBranchId) { toast.error('Selecciona una sucursal en el menú lateral'); return }
     if (items.length === 0) { toast.error('Agrega al menos un producto'); return }
     if (items.some(i => i.unit_cost <= 0)) { toast.error('Todos los productos deben tener un costo mayor a 0'); return }
 
     setSubmitting(true)
     const formData = new FormData()
-    formData.set('branch_id', branchId)
+    if (isEditing && purchaseId) formData.set('purchase_id', purchaseId)
+    formData.set('branch_id', effectiveBranchId)
     formData.set('supplier_id', supplier?.id ?? '')
     formData.set('notes', notes)
     formData.set('items', JSON.stringify(items.map(i => ({
@@ -136,12 +231,19 @@ export function PurchaseForm() {
       .map(e => ({ description: e.description.trim(), cost: parseFloat(e.cost) || 0 }))
     ))
 
-    const result = await createPurchase(formData)
+    const result = isEditing ? await updatePurchase(formData) : await createPurchase(formData)
     setSubmitting(false)
 
     if (result.success) {
-      toast.success('Compra registrada exitosamente')
-      router.push('/purchases')
+      toast.success(isEditing ? 'Compra actualizada exitosamente' : 'Compra registrada exitosamente')
+      const savedId = result.data && typeof result.data === 'object'
+        ? (result.data as { id?: string }).id
+        : undefined
+      if (isEditing && savedId) {
+        router.push(`/purchases/${savedId}`)
+      } else {
+        router.push('/purchases')
+      }
       router.refresh()
     } else {
       toast.error(result.message)
@@ -452,8 +554,8 @@ export function PurchaseForm() {
               Cancelar
             </Button>
             <Button onClick={handleSubmit}
-              disabled={submitting || !branchId || items.length === 0}>
-              {submitting ? 'Guardando...' : 'Registrar Compra'}
+              disabled={submitting || !effectiveBranchId || items.length === 0}>
+              {submitting ? 'Guardando...' : isEditing ? 'Guardar Cambios' : 'Registrar Compra'}
             </Button>
           </div>
         </CardContent>

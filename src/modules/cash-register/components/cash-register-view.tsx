@@ -86,7 +86,17 @@ export function CashRegisterView() {
   const movements = Array.isArray(movementsData?.data) ? movementsData.data : []
   const movementsTotal = movementsData?.total ?? 0
   const movementsPages = Math.max(1, Math.ceil(movementsTotal / PAGE_SIZE))
-  const balance = balanceData?.data as { balance: number; income: number; expense: number } | undefined
+  const balance = balanceData?.data as {
+    balance: number
+    income: number
+    expense: number
+    cashBalance: number
+    qrBalance: number
+    incomeCash: number
+    incomeQr: number
+    expenseCash: number
+    expenseQr: number
+  } | undefined
 
   const openModal = (type: 'manual_income' | 'manual_expense' | 'owner_withdrawal') => {
     setModalType(type)
@@ -184,6 +194,10 @@ export function CashRegisterView() {
                 Bs {(balance?.balance ?? 0).toFixed(2)}
               </span>
             </div>
+            <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+              <p>QR: <span className="font-semibold text-blue-600">Bs {(balance?.qrBalance ?? 0).toFixed(2)}</span></p>
+              <p>Efectivo: <span className="font-semibold text-emerald-600">Bs {(balance?.cashBalance ?? 0).toFixed(2)}</span></p>
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -193,6 +207,10 @@ export function CashRegisterView() {
               <ArrowUp className="h-5 w-5 text-green-600" />
               <span className="text-2xl font-bold text-green-600">Bs {(balance?.income ?? 0).toFixed(2)}</span>
             </div>
+            <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+              <p>QR: <span className="font-semibold text-blue-600">Bs {(balance?.incomeQr ?? 0).toFixed(2)}</span></p>
+              <p>Efectivo: <span className="font-semibold text-emerald-600">Bs {(balance?.incomeCash ?? 0).toFixed(2)}</span></p>
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -201,6 +219,10 @@ export function CashRegisterView() {
             <div className="flex items-center gap-2">
               <ArrowDown className="h-5 w-5 text-destructive" />
               <span className="text-2xl font-bold text-destructive">Bs {(balance?.expense ?? 0).toFixed(2)}</span>
+            </div>
+            <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+              <p>QR: <span className="font-semibold text-blue-600">Bs {(balance?.expenseQr ?? 0).toFixed(2)}</span></p>
+              <p>Efectivo: <span className="font-semibold text-emerald-600">Bs {(balance?.expenseCash ?? 0).toFixed(2)}</span></p>
             </div>
           </CardContent>
         </Card>

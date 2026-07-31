@@ -14,7 +14,7 @@ export async function proxy(request: NextRequest) {
 
   if (!hasSupabaseConfig()) {
     const { pathname } = request.nextUrl
-    const publicRoutes = ['/login', '/register', '/recover', '/auth/callback']
+    const publicRoutes = ['/login']
     const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
     if (!isPublicRoute) {
@@ -46,7 +46,7 @@ export async function proxy(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
 
   const { pathname } = request.nextUrl
-  const publicRoutes = ['/login', '/register', '/recover', '/auth/callback']
+  const publicRoutes = ['/login']
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   if (!session && !isPublicRoute) {

@@ -23,7 +23,7 @@ async function getAdminClient() {
   )
 }
 
-export async function assertAdmin() {
+export async function requireRole(allowedRoles: string[]) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autenticado')
@@ -39,22 +39,30 @@ export async function assertAdmin() {
   const isFirstSetup = count === 0
   if (isFirstSetup) return user
 
-  const { count: adminCount } = await admin
+  const { count: roleCount } = await admin
     .from('user_branches')
     .select('*', { count: 'exact', head: true })
-    .eq('role', 'admin')
+    .in('role', allowedRoles)
 
-  if (adminCount === 0) return user
+  if (roleCount === 0) return user
 
   const { data } = await admin
     .from('user_branches')
     .select('role')
     .eq('user_id', user.id)
-    .eq('role', 'admin')
+    .in('role', allowedRoles)
     .maybeSingle()
 
-  if (!data) throw new Error('Solo los administradores pueden gestionar usuarios')
+  if (!data) throw new Error('No tienes permisos para realizar esta acción')
   return user
+}
+
+export async function assertAdmin() {
+  return requireRole(['admin'])
+}
+
+export async function assertAdminOrManager() {
+  return requireRole(['admin', 'manager'])
 }
 
 export async function getUsersWithAssignments(): Promise<UserWithAssignments[]> {

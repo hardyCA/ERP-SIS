@@ -50,6 +50,8 @@ export async function createCustomer(formData: FormData): Promise<ActionResponse
     const validated = customerSchema.safeParse({
       name: formData.get('name'),
       phone: formData.get('phone') || null,
+      document_id: formData.get('document_id') || null,
+      address: formData.get('address') || null,
     })
     if (!validated.success) {
       return {
@@ -75,6 +77,8 @@ export async function updateCustomer(id: string, formData: FormData): Promise<Ac
     const validated = customerSchema.safeParse({
       name: formData.get('name'),
       phone: formData.get('phone') || null,
+      document_id: formData.get('document_id') || null,
+      address: formData.get('address') || null,
     })
     if (!validated.success) {
       return {

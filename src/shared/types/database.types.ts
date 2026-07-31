@@ -253,6 +253,8 @@ export interface Customers {
   id: string
   name: string
   phone?: string
+  document_id?: string
+  address?: string
   created_at: string
   updated_at: string
 }

@@ -36,7 +36,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - [x] Usuario puede cambiar su propia contraseña desde /profile
 - [x] Módulo Reports completo (dashboard KPIs, reportes ventas/inventario/caja/créditos)
 - [x] Transferencias de efectivo entre sucursales desde Caja (método: Efectivo/QR/Mixto)
+- [x] Eliminar venta (hard delete, solo admin): RPC delete_sale restaura stock, revierte caja y elimina crédito/pagos en una transacción (migración 010 pendiente de ejecutar)
+- [x] Compras seguras: RPCs approve/cancel/delete_purchase (transaccionales, aprobar/cancelar solo admin/manager, eliminar solo admin), confirmaciones en UI, migración 011 pendiente de ejecutar
+- [x] Editar compras pendientes: RPC update_purchase (transaccional, solo pending, admin/manager, reemplaza items/gastos), formulario con modo edición (/purchases/[id]/edit), botón "Editar" en detalle para compras pending (migración 012 pendiente de ejecutar). Registrar proveedor desde Compras ya disponible vía SupplierSelector
+- [x] Caja Chica desglose efectivo/QR: columnas payment_method/cash_amount/qr_amount en cash_register_movements, backfill parseando descripciones, todos los flujos (ventas, movimientos manuales, transferencias, pagos de crédito) registran el método; desglose QR/Efectivo bajo Saldo/Ingresos/Egresos (migración 013 pendiente de ejecutar)
+- [x] Clientes con más datos: columnas address y document_id, formulario y lista actualizados (migración 014 pendiente de ejecutar)
+- [x] Migraciones 010–015 ejecutadas en Supabase y verificadas con `scripts/verify-production.js` (columnas, RLS en todas las tablas incl. customers, RPCs protegidos)
+- [x] Registro público eliminado: /register removido, login sin "crear cuenta" ni "olvidé contraseña". La creación de usuarios y el restablecimiento de contraseña son SOLO por admin desde /users (assertAdmin + service role). El email de recuperación (auth/callback) fue descartado por decisión del usuario
+- [x] Verificación de producción: `node scripts/verify-production.js` (todo verde)
 
 ### 🔜 Próximos pasos
-- Página /auth/callback + recover password (flujo de email)
 - Fase 7: Pulido, pruebas, despliegue
+- Lint completo: errores preexistentes en scripts/*.js (no-require-imports) y src/app/(dashboard)/layout-client.tsx:48 (no-children-prop); no bloquean build

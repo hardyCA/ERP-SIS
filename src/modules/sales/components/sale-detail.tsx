@@ -1,11 +1,10 @@
 'use client'
 
-'use client'
-
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { getSaleById } from '../actions'
+import { getSaleById, deleteSale } from '../actions'
 import { registerPayment } from '@/modules/credits/actions'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -26,6 +25,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/shared/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from '@/shared/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -50,6 +58,7 @@ import {
   CheckCircle2,
   Package,
   Receipt,
+  Trash2,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -79,6 +88,7 @@ const paymentColors: Record<string, string> = {
 
 interface SaleDetailProps {
   saleId: string
+  isAdmin?: boolean
 }
 
 function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
@@ -95,12 +105,15 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: 
   )
 }
 
-export function SaleDetail({ saleId }: SaleDetailProps) {
+export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [payingCreditId, setPayingCreditId] = useState<string | null>(null)
   const [payAmount, setPayAmount] = useState('')
   const [payType, setPayType] = useState('cash')
   const [submitting, setSubmitting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['sale', saleId],
@@ -128,6 +141,25 @@ export function SaleDetail({ saleId }: SaleDetailProps) {
     }
   }
 
+  const handleDelete = async () => {
+    if (!saleId) return
+    setDeleting(true)
+    const fd = new FormData()
+    fd.set('sale_id', saleId)
+    const res = await deleteSale(fd)
+    setDeleting(false)
+    if (res.success) {
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      queryClient.invalidateQueries({ queryKey: ['cash-register'] })
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      router.push('/sales')
+    } else {
+      toast.error(res.message)
+      setConfirmingDelete(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -148,6 +180,9 @@ export function SaleDetail({ saleId }: SaleDetailProps) {
 
   const credits = (sale.sale_credits as Array<Record<string, unknown>>) || []
   const activeCredit = credits.find((c: Record<string, unknown>) => (c.balance as number) > 0)
+  const hasCreditPayments = credits.some((c: Record<string, unknown>) =>
+    Array.isArray(c.payments) && (c.payments as Array<Record<string, unknown>>).length > 0
+  )
   const pt = (sale.payment_type as string) || ''
   const saleNumber = ((sale.number as number)?.toString().padStart(4, '0')) ?? (sale.id as string).slice(0, 8)
   const PaymentIcon = paymentIcons[pt] ?? WalletMinimal
@@ -281,6 +316,16 @@ export function SaleDetail({ saleId }: SaleDetailProps) {
             }}>
             <FileDown className="h-3.5 w-3.5 mr-1.5" /> PDF
           </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs text-destructive hover:text-destructive hover:border-destructive/40"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Eliminar
+            </Button>
+          )}
           <Badge variant={pt === 'cash' ? 'default' : pt === 'qr' ? 'info' : pt === 'mixed' ? 'warning' : 'pending'} className="h-7 px-3 text-xs gap-1.5">
             <PaymentIcon className="h-3.5 w-3.5" />
             {paymentLabels[pt] ?? pt}
@@ -520,6 +565,43 @@ export function SaleDetail({ saleId }: SaleDetailProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* === DELETE CONFIRMATION === */}
+      <AlertDialog open={confirmingDelete} onOpenChange={(o) => { if (!o && !deleting) setConfirmingDelete(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta venta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará la venta <span className="font-semibold text-foreground">#{saleNumber}</span> permanentemente y no se puede deshacer.
+            </AlertDialogDescription>
+            <ul className="mt-2 space-y-1.5 text-xs list-disc list-inside">
+              <li>El stock de los productos se <span className="font-medium text-foreground">devolverá</span> a la sucursal.</li>
+              <li>Los movimientos de caja de esta venta se <span className="font-medium text-foreground">revertirán</span>.</li>
+              {pt === 'credit' && (
+                <li>
+                  El crédito <span className="font-medium text-foreground">se cancelará</span>
+                  {hasCreditPayments ? ' y los pagos ya registrados se eliminarán' : ''}.
+                </li>
+              )}
+            </ul>
+            {pt === 'credit' && hasCreditPayments && (
+              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                Esta venta a crédito ya tiene pagos registrados. Al eliminarla, esos cobros desaparecerán del sistema y de la caja.
+              </p>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

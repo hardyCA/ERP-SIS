@@ -469,6 +469,7 @@ interface PurchasePdfData {
   responsible: string
   total: number
   items: { product_name: string; quantity: number; unit_cost: number; subtotal: number }[]
+  expenses: { description: string; cost: number }[]
   notes: string | null
 }
 
@@ -534,6 +535,9 @@ export function exportPurchasePdf(data: PurchasePdfData, showCost = true) {
 
   const tableStartY = infoY + 12
 
+  const itemsTotal = data.items.reduce((s, i) => s + i.subtotal, 0)
+  const expensesTotal = data.expenses.reduce((s, e) => s + e.cost, 0)
+
   const headRow = showCost
     ? ['Nombre', 'Cantidad', 'Costo Unit.', 'Subtotal']
     : ['Nombre', 'Cantidad']
@@ -551,7 +555,7 @@ export function exportPurchasePdf(data: PurchasePdfData, showCost = true) {
       ])
 
   const footRow = showCost
-    ? ['', '', 'TOTAL', `Bs ${data.total.toFixed(2)}`]
+    ? ['', '', 'TOTAL', `Bs ${itemsTotal.toFixed(2)}`]
     : ['', `TOTAL: Bs ${data.total.toFixed(2)}`]
 
   const colStyles: Record<string, { halign: 'left' | 'center' | 'right' | 'justify' }> = showCost
@@ -589,6 +593,51 @@ export function exportPurchasePdf(data: PurchasePdfData, showCost = true) {
     tableLineColor: [0, 0, 0],
     tableLineWidth: 0.3,
   })
+
+  const afterItems = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 3
+
+  if (showCost && data.expenses.length > 0) {
+    doc.setFontSize(8)
+    setBold()
+    doc.setTextColor(0)
+    doc.text('GASTOS OPERATIVOS', ml, afterItems)
+    setNormal()
+
+    autoTable(doc, {
+      startY: afterItems + 2,
+      head: [['Detalle', 'Costo']],
+      body: data.expenses.map((e) => [e.description, `Bs ${e.cost.toFixed(2)}`]),
+      foot: [['TOTAL GASTOS', `Bs ${expensesTotal.toFixed(2)}`]],
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 1.5,
+        lineColor: [0, 0, 0],
+        lineWidth: 0.3,
+        textColor: [0, 0, 0],
+      },
+      headStyles: {
+        fillColor: [230, 230, 230],
+        textColor: [0, 0, 0],
+        fontSize: 7,
+        fontStyle: 'bold',
+        halign: 'center',
+      },
+      footStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontSize: 7.5,
+        fontStyle: 'bold',
+        halign: 'right',
+        cellPadding: 2,
+      },
+      columnStyles: {
+        0: {},
+        1: { halign: 'right', cellWidth: 40 },
+      },
+      tableLineColor: [0, 0, 0],
+      tableLineWidth: 0.3,
+    })
+  }
 
   const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 3
 

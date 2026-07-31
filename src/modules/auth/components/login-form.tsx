@@ -121,15 +121,6 @@ export function LoginForm() {
               )}
             />
 
-            <div className="flex items-center justify-end">
-              <a
-                href="/recover"
-                className="text-sm font-medium text-primary transition-colors hover:text-primary/80 hover:underline"
-              >
-                ¿Olvidaste tu contraseña?
-              </a>
-            </div>
-
             {state && !state.success && (
               <div className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {state.message}
@@ -155,27 +146,6 @@ export function LoginForm() {
             </Button>
           </form>
         </Form>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border/60" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-3 text-muted-foreground">
-              o
-            </span>
-          </div>
-        </div>
-
-        <div className="text-center text-sm text-muted-foreground">
-          ¿No tienes cuenta?{' '}
-          <a
-            href="/register"
-            className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline"
-          >
-            Crea una cuenta gratis
-          </a>
-        </div>
       </CardContent>
     </Card>
   )

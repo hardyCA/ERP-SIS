@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getPurchaseById, approvePurchase, cancelPurchase } from '../actions'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { getPurchaseById, approvePurchase, cancelPurchase, deletePurchase } from '../actions'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
@@ -15,19 +17,32 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from '@/shared/components/ui/alert-dialog'
 import { useShowCost } from '@/shared/lib/use-role'
-import { Package, Printer, FileDown, Truck, CheckCircle, XCircle } from 'lucide-react'
+import { Package, Printer, FileDown, Truck, CheckCircle, XCircle, Trash2, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import Image from 'next/image'
 import { exportPurchasePdf, printElement } from '@/shared/lib/export'
 
 interface PurchaseDetailProps {
   purchaseId: string
+  canManage?: boolean
+  isAdmin?: boolean
 }
 
-export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
+export function PurchaseDetail({ purchaseId, canManage = false, isAdmin = false }: PurchaseDetailProps) {
   const queryClient = useQueryClient()
-  const [actionLoading, setActionLoading] = useState<'approve' | 'cancel' | null>(null)
+  const router = useRouter()
+  const [actionLoading, setActionLoading] = useState<'approve' | 'cancel' | 'delete' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'approve' | 'cancel' | 'delete' | null>(null)
   const showCost = useShowCost()
 
   const { data: result, isLoading } = useQuery({
@@ -62,29 +77,36 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
   const purchaseData = purchase as Record<string, unknown>
   const expenses = (purchaseData.expenses ?? []) as Array<{ id: string; description: string; cost: number }>
 
-  const handleApprove = async () => {
-    setActionLoading('approve')
-    const res = await approvePurchase(purchaseId)
-    setActionLoading(null)
-    if (res.success) {
-      toast.success('Compra aprobada exitosamente')
-      queryClient.invalidateQueries({ queryKey: ['purchase', purchaseId] })
-      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+  const runAction = async (action: 'approve' | 'cancel' | 'delete') => {
+    setActionLoading(action)
+    let res: { success: boolean; message: string }
+    if (action === 'delete') {
+      const fd = new FormData()
+      fd.set('purchase_id', purchaseId)
+      res = await deletePurchase(fd)
     } else {
-      toast.error(res.message)
+      res = action === 'approve'
+        ? await approvePurchase(purchaseId)
+        : await cancelPurchase(purchaseId)
     }
-  }
-
-  const handleCancel = async () => {
-    setActionLoading('cancel')
-    const res = await cancelPurchase(purchaseId)
     setActionLoading(null)
+
     if (res.success) {
-      toast.success('Compra cancelada')
+      if (action === 'delete') {
+        toast.success(res.message)
+        queryClient.invalidateQueries({ queryKey: ['purchases'] })
+        queryClient.invalidateQueries({ queryKey: ['inventory'] })
+        router.push('/purchases')
+        return
+      }
+      toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['purchase', purchaseId] })
       queryClient.invalidateQueries({ queryKey: ['purchases'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      setConfirmAction(null)
     } else {
       toast.error(res.message)
+      setConfirmAction(null)
     }
   }
 
@@ -106,17 +128,28 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
               </Badge>
             </div>
             <div className="flex items-center gap-2">
-              {purchase.status === 'pending' && (
+              {purchase.status === 'pending' && canManage && (
                 <>
+                  <Link href={`/purchases/${purchaseId}/edit`}>
+                    <Button variant="outline" size="sm" className="h-7 text-[11px]">
+                      <Pencil className="h-3 w-3 mr-1" /> Editar
+                    </Button>
+                  </Link>
                   <Button variant="default" size="sm" className="h-7 text-[11px]"
-                    onClick={handleApprove} disabled={actionLoading === 'approve'}>
+                    onClick={() => setConfirmAction('approve')} disabled={actionLoading === 'approve'}>
                     <CheckCircle className="h-3 w-3 mr-1" /> {actionLoading === 'approve' ? 'Aprobando...' : 'Aprobar'}
                   </Button>
                   <Button variant="outline" size="sm" className="h-7 text-[11px] text-destructive border-destructive/30 hover:bg-destructive/10"
-                    onClick={handleCancel} disabled={actionLoading === 'cancel'}>
+                    onClick={() => setConfirmAction('cancel')} disabled={actionLoading === 'cancel'}>
                     <XCircle className="h-3 w-3 mr-1" /> {actionLoading === 'cancel' ? 'Cancelando...' : 'Cancelar'}
                   </Button>
                 </>
+              )}
+              {isAdmin && (
+                <Button variant="outline" size="sm" className="h-7 text-[11px] text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => setConfirmAction('delete')} disabled={actionLoading === 'delete'}>
+                  <Trash2 className="h-3 w-3 mr-1" /> {actionLoading === 'delete' ? 'Eliminando...' : 'Eliminar'}
+                </Button>
               )}
               <Button variant="outline" size="sm" className="h-7 text-[11px]"
                 onClick={() => printElement('purchase-detail')}>
@@ -140,6 +173,10 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
                       quantity: i.quantity,
                       unit_cost: Number(i.unit_cost),
                       subtotal: Number(i.subtotal),
+                    })),
+                    expenses: expenses.map(e => ({
+                      description: e.description,
+                      cost: Number(e.cost),
                     })),
                   }, showCost)
                 }}>
@@ -248,6 +285,65 @@ export function PurchaseDetail({ purchaseId }: PurchaseDetailProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* === CONFIRM ACTION === */}
+      <AlertDialog open={!!confirmAction} onOpenChange={(o) => { if (!o && !actionLoading) setConfirmAction(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction === 'approve' && '¿Aprobar esta compra?'}
+              {confirmAction === 'cancel' && '¿Cancelar esta compra?'}
+              {confirmAction === 'delete' && '¿Eliminar esta compra?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction === 'approve' && (
+                <>
+                  La compra <span className="font-semibold text-foreground">#{purchase.number?.toString().padStart(4, '0') ?? '—'}</span> pasará a estado aprobado.
+                </>
+              )}
+              {confirmAction === 'cancel' && (
+                <>
+                  La compra <span className="font-semibold text-foreground">#{purchase.number?.toString().padStart(4, '0') ?? '—'}</span> pasará a estado cancelado. No afecta el stock (aún no aprobada).
+                </>
+              )}
+              {confirmAction === 'delete' && (
+                <>
+                  Esta acción eliminará la compra <span className="font-semibold text-foreground">#{purchase.number?.toString().padStart(4, '0') ?? '—'}</span> permanentemente y no se puede deshacer.
+                </>
+              )}
+            </AlertDialogDescription>
+            {confirmAction === 'approve' && (
+              <ul className="space-y-1.5 text-xs list-disc list-inside">
+                <li>El stock de los productos se <span className="font-medium text-foreground">incrementará</span> en la sucursal.</li>
+                <li>El costo promedio ponderado de los productos se <span className="font-medium text-foreground">actualizará</span>.</li>
+              </ul>
+            )}
+            {confirmAction === 'delete' && purchase.status === 'approved' && (
+              <ul className="space-y-1.5 text-xs list-disc list-inside">
+                <li>El stock que aumentó esta compra se <span className="font-medium text-foreground">devolverá</span> a la sucursal.</li>
+                <li>El costo promedio de los productos se <span className="font-medium text-foreground">recalculará</span>.</li>
+              </ul>
+            )}
+            {confirmAction === 'delete' && purchase.status !== 'approved' && (
+              <p className="text-xs">Es una proforma sin afectar stock, se elimina sin efectos en inventario.</p>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!actionLoading}>Cancelar</AlertDialogCancel>
+            <Button
+              variant={confirmAction === 'cancel' ? 'outline' : 'destructive'}
+              className={confirmAction === 'cancel' ? 'text-destructive border-destructive/30' : ''}
+              disabled={!!actionLoading}
+              onClick={() => confirmAction && runAction(confirmAction)}
+            >
+              {actionLoading === 'approve' && 'Aprobando...'}
+              {actionLoading === 'cancel' && 'Cancelando...'}
+              {actionLoading === 'delete' && 'Eliminando...'}
+              {!actionLoading && (confirmAction === 'approve' ? 'Sí, aprobar' : confirmAction === 'cancel' ? 'Sí, cancelar' : 'Sí, eliminar')}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
