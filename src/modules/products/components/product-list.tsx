@@ -21,6 +21,7 @@ import Image from 'next/image'
 import { ConfirmDialog } from '@/shared/components/confirm-dialog'
 import { ProductPricesDialog } from './product-prices-dialog'
 import { useShowCost } from '@/shared/lib/use-role'
+import { useBranch } from '@/shared/contexts/branch-context'
 
 interface ProductListProps {
   brandId: string
@@ -32,6 +33,7 @@ const PAGE_SIZE = 15
 
 export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
   const showCost = useShowCost()
+  const { branchId } = useBranch()
   const queryClient = useQueryClient()
   const [pricesProduct, setPricesProduct] = useState<{ id: string; name: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -42,7 +44,7 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
   useEffect(() => { setPage(1) }, [brandId, categoryId, searchQuery])
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['products', brandId, categoryId],
+    queryKey: ['products', brandId, categoryId, branchId],
     queryFn: () => getProductsByCategory(brandId, categoryId),
     staleTime: 0,
   })
@@ -69,7 +71,14 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
     cost: number
     image_url: string | null
     is_active: boolean
+    inventory_items: Array<{ branch_id: string; sale_price: number }>
   }>
+
+  const getBranchPrice = (product: (typeof products)[number]): number | null => {
+    if (!branchId) return null
+    const item = product.inventory_items?.find(i => i.branch_id === branchId)
+    return item ? Number(item.sale_price) : null
+  }
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products
@@ -111,15 +120,16 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
             <TableRow className="bg-muted/40">
               <TableHead className="w-14" />
               <TableHead>Producto</TableHead>
-              {showCost && <TableHead className="w-32">Costo Base</TableHead>}
-              <TableHead className="w-28">Estado</TableHead>
+              {showCost && <TableHead className="w-28">Costo Base</TableHead>}
+              <TableHead className="w-28">Precio</TableHead>
+              <TableHead className="w-24">Estado</TableHead>
               <TableHead className="w-36 text-right pr-4">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={showCost ? 5 : 4} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={showCost ? 6 : 5} className="text-center text-muted-foreground py-10">
                   {searchQuery ? `No se encontraron productos para "${searchQuery}"` : 'No hay productos en esta categoría. Crea el primero.'}
                 </TableCell>
               </TableRow>
@@ -143,6 +153,9 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
                 </TableCell>
                 <TableCell className="font-semibold text-sm text-foreground">{product.name}</TableCell>
                 {showCost && <TableCell className="font-mono text-sm">Bs {Number(product.cost).toFixed(2)}</TableCell>}
+                <TableCell className="font-mono text-sm">
+                  {getBranchPrice(product) !== null ? `Bs ${getBranchPrice(product)!.toFixed(2)}` : <span className="text-muted-foreground">—</span>}
+                </TableCell>
                 <TableCell>
                   <Badge variant={product.is_active ? 'default' : 'secondary'} className="text-[10px] px-2 py-0.5 font-medium">
                     {product.is_active ? 'Activo' : 'Inactivo'}
@@ -199,10 +212,15 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
               )}
               <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-sm text-foreground break-words">{product.name}</h4>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <Badge variant={product.is_active ? 'default' : 'secondary'} className="text-[10px] px-2">
                     {product.is_active ? 'Activo' : 'Inactivo'}
                   </Badge>
+                  {getBranchPrice(product) !== null && (
+                    <span className="text-xs font-mono font-semibold text-primary">
+                      Bs {getBranchPrice(product)!.toFixed(2)}
+                    </span>
+                  )}
                   {showCost && (
                     <span className="text-xs font-mono font-semibold text-muted-foreground">
                       Costo: Bs {Number(product.cost).toFixed(2)}

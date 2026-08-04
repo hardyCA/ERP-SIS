@@ -81,14 +81,15 @@ export async function getDashboardStats(branchId?: string): Promise<ActionRespon
 
     let creditsQuery = supabase
       .from('sale_credits')
-      .select('total')
+      .select('total, sales(branch_id)')
       .gt('balance', 0)
 
     if (branchId) {
       creditsQuery = creditsQuery.eq('sales.branch_id', branchId)
     }
 
-    const { data: activeCredits } = await creditsQuery
+    const { data: activeCredits, error: creditsError } = await creditsQuery
+    if (creditsError) throw new Error(creditsError.message)
     const activeCreditsCount = activeCredits?.length ?? 0
     const activeCreditsAmount = (activeCredits ?? []).reduce((sum, c) => sum + Number(c.total), 0)
 

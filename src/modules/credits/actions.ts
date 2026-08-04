@@ -8,17 +8,21 @@ export type ActionResponse<T = unknown> = {
   data?: T
 }
 
-export async function getCredits() {
+export async function getCredits(branchId?: string) {
   try {
     const supabase = await createClient()
-    const { data, error } = await supabase
+    let query = supabase
       .from('sale_credits')
       .select(`
         *,
-        sale:sales(*),
+        sale:sales!inner(number, branch_id, customer_name, created_at, customer_phone),
         payments:credit_payments(*)
       `)
       .order('created_at', { ascending: false })
+
+    if (branchId) query = query.eq('sales.branch_id', branchId)
+
+    const { data, error } = await query
     if (error) throw new Error(error.message)
     return { success: true, data: data ?? [] }
   } catch (e) {

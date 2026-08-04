@@ -7,8 +7,8 @@ import { Button } from '@/shared/components/ui/button'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
-import { Timer, FileSpreadsheet } from 'lucide-react'
-import { exportToExcel } from '@/shared/lib/export'
+import { Timer, FileSpreadsheet, FileText, Printer } from 'lucide-react'
+import { exportToExcel, exportToPdf, printElement } from '@/shared/lib/export'
 import {
   Table,
   TableBody,
@@ -40,6 +40,38 @@ export function CreditsReport() {
   const totalPending = activeCredits.reduce((sum, c) => sum + c.balance, 0)
   const totalPaid = credits.filter(c => c.balance === 0).reduce((sum, c) => sum + c.total, 0)
 
+  const pendingRows = activeCredits.map((c) => ({
+    '#': c.sale_number.toString().padStart(4, '0'),
+    Cliente: c.customer_name ?? '—',
+    Total: `Bs ${c.total.toFixed(2)}`,
+    Saldo: `Bs ${c.balance.toFixed(2)}`,
+    Pagos: c.payment_count,
+    Días: `${c.days}d`,
+    Fecha: new Date(c.created_at).toLocaleDateString(),
+  }))
+
+  const exportPendingPdf = () => {
+    exportToPdf(
+      'Créditos Pendientes',
+      'Reporte de créditos pendientes de cobro',
+      [
+        { header: 'Venta #', dataKey: '#' },
+        { header: 'Cliente', dataKey: 'Cliente' },
+        { header: 'Total', dataKey: 'Total' },
+        { header: 'Saldo', dataKey: 'Saldo' },
+        { header: 'Pagos', dataKey: 'Pagos' },
+        { header: 'Días', dataKey: 'Días' },
+        { header: 'Fecha', dataKey: 'Fecha' },
+      ],
+      pendingRows,
+      [
+        { label: 'Créditos pendientes', value: activeCredits.length.toString() },
+        { label: 'Total pendiente', value: `Bs ${totalPending.toFixed(2)}` },
+      ],
+      'creditos-pendientes'
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
@@ -57,7 +89,7 @@ export function CreditsReport() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" className="h-7 text-[11px]"
           onClick={() => {
             const data = credits.map((c) => ({
@@ -74,6 +106,49 @@ export function CreditsReport() {
           }}>
           <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
         </Button>
+        <Button variant="outline" size="sm" className="h-7 text-[11px]"
+          onClick={exportPendingPdf}>
+          <FileText className="h-3 w-3 mr-1" /> PDF
+        </Button>
+        <Button variant="outline" size="sm" className="h-7 text-[11px]"
+          onClick={() => printElement('credits-pending-print')}>
+          <Printer className="h-3 w-3 mr-1" /> Imprimir
+        </Button>
+      </div>
+
+      <div id="credits-pending-print" className="hidden">
+        <h1>Créditos Pendientes</h1>
+        <h2>Reporte de créditos pendientes de cobro</h2>
+        <div className="summary">
+          <div className="summary-row"><span>Créditos pendientes</span><span>{activeCredits.length}</span></div>
+          <div className="summary-row"><span>Total pendiente</span><span>Bs {totalPending.toFixed(2)}</span></div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Venta #</th>
+              <th>Cliente</th>
+              <th>Total</th>
+              <th>Saldo</th>
+              <th>Pagos</th>
+              <th>Días</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeCredits.map((c) => (
+              <tr key={c.id}>
+                <td>#{c.sale_number.toString().padStart(4, '0')}</td>
+                <td>{c.customer_name ?? '—'}</td>
+                <td>Bs {c.total.toFixed(2)}</td>
+                <td>Bs {c.balance.toFixed(2)}</td>
+                <td>{c.payment_count}</td>
+                <td>{c.days}d</td>
+                <td>{new Date(c.created_at).toLocaleDateString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {isLoading ? (

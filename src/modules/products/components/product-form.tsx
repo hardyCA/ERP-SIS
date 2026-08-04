@@ -5,8 +5,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { productSchema, type ProductInput } from '../types'
-import { createProduct, updateProduct, getProductById } from '../actions'
+import { createProduct, updateProduct, getProductById, getProductBranchPrices } from '../actions'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useBranch } from '@/shared/contexts/branch-context'
 import {
   Form,
   FormControl,
@@ -20,7 +21,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Separator } from '@/shared/components/ui/separator'
 import Image from 'next/image'
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { Package, ImageUp, CircleDollarSign, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { useShowCost } from '@/shared/lib/use-role'
@@ -35,6 +36,7 @@ interface ProductFormProps {
 export function ProductForm({ brandId, categoryId, productId, onSuccess }: ProductFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { branchId, branchName } = useBranch()
   const isEditing = !!productId
   const [preview, setPreview] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -51,6 +53,19 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
     enabled: isEditing,
   })
 
+  const { data: branchPricesData } = useQuery({
+    queryKey: ['product-branch-price', productId, branchId],
+    queryFn: () => getProductBranchPrices(productId ?? ''),
+    enabled: isEditing && !!productId && !!branchId,
+  })
+
+  const currentBranchPrice = useMemo(() => {
+    if (!branchId) return 0
+    const prices = branchPricesData?.success ? (branchPricesData.data ?? []) : []
+    const found = prices.find((p: Record<string, unknown>) => p.branch_id === branchId)
+    return found ? Number(found.sale_price ?? 0) : 0
+  }, [branchPricesData, branchId])
+
   const showCost = useShowCost()
 
   const form = useForm<ProductInput>({
@@ -60,11 +75,13 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
       name: '',
       brand_id: brandId,
       category_id: categoryId,
+      sale_price: 0,
     },
     values: product ? {
       name: product.name,
       brand_id: brandId,
       category_id: categoryId,
+      sale_price: currentBranchPrice,
     } : undefined,
   })
 
@@ -85,6 +102,10 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
     formData.set('name', data.name)
     formData.set('brand_id', brandId)
     formData.set('category_id', categoryId)
+    if (branchId) {
+      formData.set('branch_id', branchId)
+      formData.set('sale_price', data.sale_price !== undefined ? String(data.sale_price) : '')
+    }
     if (selectedFile) {
       formData.set('image', selectedFile)
     }
@@ -146,6 +167,35 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
                       </FormItem>
                     )}
                   />
+                  {branchId && (
+                    <FormField
+                      control={form.control}
+                      name="sale_price"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Precio de venta (Bs)</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <CircleDollarSign className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                className="pl-8"
+                                {...field}
+                              />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            Se aplicará como precio inicial en la sucursal:{' '}
+                            <span className="font-medium">{branchName || branchId}</span>
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   {showCost && (
                     <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4">
                       <div className="flex items-start gap-3">

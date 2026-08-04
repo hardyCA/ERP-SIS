@@ -4,6 +4,7 @@ export const productSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
   brand_id: z.string().uuid(),
   category_id: z.string().uuid(),
+  sale_price: z.coerce.number().min(0, 'El precio no puede ser negativo').optional(),
 })
 export type ProductInput = z.infer<typeof productSchema>
 

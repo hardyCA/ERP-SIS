@@ -33,14 +33,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { ArrowDown, ArrowUp, Plus, Minus, Wallet, ChevronLeft, ChevronRight, ArrowLeftRight } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Minus, Wallet, ChevronLeft, ChevronRight, ArrowLeftRight, FileText, Printer } from 'lucide-react'
 import { movementTypeLabels, reverseTypes } from '../types'
+import { exportToPdf, printElement } from '@/shared/lib/export'
 
 const PAGE_SIZE = 15
 
 export function CashRegisterView() {
   const queryClient = useQueryClient()
-  const { branchId } = useBranch()
+  const { branchId, branchName } = useBranch()
 
   const [showModal, setShowModal] = useState(false)
   const [modalType, setModalType] = useState<'manual_income' | 'manual_expense' | 'owner_withdrawal'>('manual_income')
@@ -68,12 +69,14 @@ export function CashRegisterView() {
     queryKey: ['cash-movements', branchId, page],
     queryFn: () => getMovements({ branchId: branchId || undefined, page, pageSize: PAGE_SIZE }),
     staleTime: 0,
+    enabled: !!branchId,
   })
 
   const { data: balanceData } = useQuery({
     queryKey: ['cash-balance', branchId],
     queryFn: () => getBalance(branchId || undefined),
     staleTime: 0,
+    enabled: !!branchId,
   })
 
   const { data: branchesData } = useQuery({
@@ -184,6 +187,9 @@ export function CashRegisterView() {
   return (
     <div className="space-y-6">
       {/* Balance cards */}
+      {!branchId ? (
+        <div className="text-center text-muted-foreground py-12">Selecciona una sucursal en el menú lateral</div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Saldo Actual</CardTitle></CardHeader>
@@ -227,6 +233,7 @@ export function CashRegisterView() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Actions */}
       {branchId && (
@@ -243,6 +250,47 @@ export function CashRegisterView() {
             </Button>
             <Button variant="default" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => { setTransferDest(''); setTransferAmount(''); setTransferMethod('cash'); setTransferCashAmt(''); setTransferQrAmt(''); setTransferDesc(''); setShowTransfer(true) }}>
               <ArrowLeftRight className="h-4 w-4" /> Transferir
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[11px] ml-auto"
+              onClick={() => {
+                exportToPdf(
+                  `Caja - ${branchName || 'Sucursal'}`,
+                  'Reporte de movimientos de caja',
+                  [
+                    { header: '#', dataKey: '#' },
+                    { header: 'Tipo', dataKey: 'Tipo' },
+                    { header: 'Monto', dataKey: 'Monto' },
+                    { header: 'Efectivo', dataKey: 'Efectivo' },
+                    { header: 'QR', dataKey: 'QR' },
+                    { header: 'Descripción', dataKey: 'Descripción' },
+                    { header: 'Registrado por', dataKey: 'Registrado por' },
+                    { header: 'Fecha', dataKey: 'Fecha' },
+                  ],
+                  movements.map((m: Record<string, unknown>) => ({
+                    '#': (m.number as number)?.toString().padStart(4, '0') ?? (m.id as string).slice(0, 8),
+                    Tipo: movementTypeLabels[m.type as string] ?? m.type,
+                    Monto: `${(reverseTypes[m.type as string] ?? 0) > 0 ? '+' : ''}Bs ${Number(m.amount).toFixed(2)}`,
+                    Efectivo: `Bs ${Number(m.cash_amount ?? 0).toFixed(2)}`,
+                    QR: `Bs ${Number(m.qr_amount ?? 0).toFixed(2)}`,
+                    Descripción: (m.description as string) ?? '—',
+                    'Registrado por': (m.created_by_name as string) ?? '—',
+                    Fecha: new Date(m.created_at as string).toLocaleString(),
+                  })),
+                  [
+                    { label: 'Saldo actual', value: `Bs ${(balance?.balance ?? 0).toFixed(2)}` },
+                    { label: 'Ingresos', value: `Bs ${(balance?.income ?? 0).toFixed(2)}` },
+                    { label: 'Egresos', value: `Bs ${(balance?.expense ?? 0).toFixed(2)}` },
+                    { label: 'Balance Efectivo', value: `Bs ${(balance?.cashBalance ?? 0).toFixed(2)}` },
+                    { label: 'Balance QR', value: `Bs ${(balance?.qrBalance ?? 0).toFixed(2)}` },
+                  ],
+                  'caja'
+                )
+              }}>
+              <FileText className="h-3 w-3 mr-1" /> PDF
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[11px]"
+              onClick={() => printElement('cash-print')}>
+              <Printer className="h-3 w-3 mr-1" /> Imprimir
             </Button>
           </CardContent>
         </Card>
@@ -327,9 +375,49 @@ export function CashRegisterView() {
         </div>
       )}
 
+      <div id="cash-print" className="hidden">
+        <h1>Caja - {branchName || 'Sucursal'}</h1>
+        <h2>Reporte de movimientos de caja</h2>
+        <div className="summary">
+          <div className="summary-row"><span>Saldo actual</span><span>Bs {(balance?.balance ?? 0).toFixed(2)}</span></div>
+          <div className="summary-row"><span>Ingresos</span><span>Bs {(balance?.income ?? 0).toFixed(2)}</span></div>
+          <div className="summary-row"><span>Egresos</span><span>Bs {(balance?.expense ?? 0).toFixed(2)}</span></div>
+          <div className="summary-row"><span>Balance Efectivo</span><span>Bs {(balance?.cashBalance ?? 0).toFixed(2)}</span></div>
+          <div className="summary-row"><span>Balance QR</span><span>Bs {(balance?.qrBalance ?? 0).toFixed(2)}</span></div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Tipo</th>
+              <th>Monto</th>
+              <th>Efectivo</th>
+              <th>QR</th>
+              <th>Descripción</th>
+              <th>Registrado por</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {movements.map((m: Record<string, unknown>) => (
+              <tr key={m.id as string}>
+                <td>#{((m.number as number)?.toString().padStart(4, '0') ?? (m.id as string).slice(0, 8))}</td>
+                <td>{movementTypeLabels[m.type as string] ?? m.type}</td>
+                <td>{`${(reverseTypes[m.type as string] ?? 0) > 0 ? '+' : ''}Bs ${Number(m.amount).toFixed(2)}`}</td>
+                <td>Bs {Number(m.cash_amount ?? 0).toFixed(2)}</td>
+                <td>Bs {Number(m.qr_amount ?? 0).toFixed(2)}</td>
+                <td>{(m.description as string) ?? '—'}</td>
+                <td>{(m.created_by_name as string) ?? '—'}</td>
+                <td>{new Date(m.created_at as string).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {/* Modal - Movimientos Manuales */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {modalType === 'manual_income' ? 'Ingreso Manual' : modalType === 'manual_expense' ? 'Egreso Manual' : 'Retiro de Propietario'}

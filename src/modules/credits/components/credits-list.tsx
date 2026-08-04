@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getCredits, registerPayment } from '../actions'
+import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -42,6 +43,7 @@ const PAGE_SIZE = 10
 
 export function CreditsList() {
   const queryClient = useQueryClient()
+  const { branchId } = useBranch()
   const [payingCreditId, setPayingCreditId] = useState<string | null>(null)
   const [payAmount, setPayAmount] = useState('')
   const [payType, setPayType] = useState('cash')
@@ -50,8 +52,8 @@ export function CreditsList() {
   const [paidPage, setPaidPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['credits'],
-    queryFn: () => getCredits(),
+    queryKey: ['credits', branchId],
+    queryFn: () => getCredits(branchId || undefined),
     staleTime: 0,
   })
 

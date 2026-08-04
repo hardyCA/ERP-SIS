@@ -678,3 +678,185 @@ export function exportPurchasePdf(data: PurchasePdfData, showCost = true) {
 
   doc.save(`compra-${data.number}.pdf`)
 }
+
+interface TransferPdfData {
+  number: string
+  date: string
+  fromBranch: string
+  fromBranchAddress: string
+  fromBranchPhone: string
+  toBranch: string
+  toBranchAddress: string
+  toBranchPhone: string
+  createdBy: string
+  sentBy: string
+  receivedBy: string
+  statusLabel: string
+  notes: string | null
+  items: { product_name: string; quantity: number; unit_cost: number }[]
+}
+
+export function exportTransferPdf(data: TransferPdfData, showCost = true) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pw = doc.internal.pageSize.getWidth()
+  const ml = 14
+  const mr = 14
+  const rightX = pw - mr
+
+  doc.setFont('helvetica', 'normal')
+
+  function setBold() { doc.setFont('helvetica', 'bold') }
+  function setNormal() { doc.setFont('helvetica', 'normal') }
+
+  const logoY = 14
+  doc.setFontSize(20)
+  setBold()
+  doc.text('SIIM', ml, logoY)
+  setNormal()
+  doc.setFontSize(6.5)
+  doc.setTextColor(120)
+  doc.text('Sistema Integral de Inventarios', ml, logoY + 3.5)
+
+  doc.setFontSize(14)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('TRASPASO DE INVENTARIO', pw / 2, logoY + 8, { align: 'center' })
+  setNormal()
+  doc.setFontSize(8)
+  doc.setTextColor(80)
+  doc.text(`Estado: ${data.statusLabel}`, pw / 2, logoY + 12, { align: 'center' })
+
+  const blockW = 52
+  const blockX = rightX - blockW
+
+  doc.setFontSize(6)
+  setNormal()
+  doc.setTextColor(120)
+  doc.text('COMPROBANTE', blockX + blockW / 2, logoY + 0.5, { align: 'center' })
+
+  doc.setFontSize(9)
+  setBold()
+  doc.setTextColor(0)
+  doc.text(`N° ${data.number}`, blockX + blockW / 2, logoY + 5.5, { align: 'center' })
+
+  doc.setFontSize(6)
+  setNormal()
+  doc.setTextColor(120)
+  doc.text(data.date, blockX + blockW / 2, logoY + 9.5, { align: 'center' })
+
+  const infoY = logoY + 17
+  doc.setFontSize(7.5)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('DATOS DEL TRASPASO', ml, infoY)
+  setNormal()
+  doc.setTextColor(80)
+  doc.setFontSize(7.5)
+
+  doc.text(`Origen: ${data.fromBranch}`, ml, infoY + 4.5)
+  if (data.fromBranchAddress) doc.text(`Dirección: ${data.fromBranchAddress}`, ml, infoY + 8.5)
+  if (data.fromBranchPhone) doc.text(`Tel: ${data.fromBranchPhone}`, ml, infoY + 12.5)
+  doc.text(`Destino: ${data.toBranch}`, rightX, infoY + 4.5, { align: 'right' })
+  if (data.toBranchAddress) doc.text(`Dirección: ${data.toBranchAddress}`, rightX, infoY + 8.5, { align: 'right' })
+  if (data.toBranchPhone) doc.text(`Tel: ${data.toBranchPhone}`, rightX, infoY + 12.5, { align: 'right' })
+
+  const tableStartY = infoY + 17
+
+  const itemsTotal = data.items.reduce((s, i) => s + i.quantity * i.unit_cost, 0)
+  const totalUnits = data.items.reduce((s, i) => s + i.quantity, 0)
+
+  const headRow = showCost
+    ? ['Nombre', 'Cantidad', 'Costo Unit.', 'Subtotal']
+    : ['Nombre', 'Cantidad']
+
+  const bodyRows = showCost
+    ? data.items.map(i => [
+        i.product_name,
+        String(i.quantity),
+        `Bs ${i.unit_cost.toFixed(2)}`,
+        `Bs ${(i.quantity * i.unit_cost).toFixed(2)}`,
+      ])
+    : data.items.map(i => [i.product_name, String(i.quantity)])
+
+  const footRow = showCost
+    ? ['', '', 'TOTAL', `Bs ${itemsTotal.toFixed(2)}`]
+    : ['', `TOTAL UNIDADES: ${totalUnits}`]
+
+  const colStyles: Record<string, { halign: 'left' | 'center' | 'right' | 'justify' }> = showCost
+    ? { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+    : { 1: { halign: 'right' } }
+
+  autoTable(doc, {
+    startY: tableStartY,
+    head: [headRow],
+    body: bodyRows,
+    foot: [footRow],
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 1.5,
+      lineColor: [0, 0, 0],
+      lineWidth: 0.3,
+      textColor: [0, 0, 0],
+    },
+    headStyles: {
+      fillColor: [230, 230, 230],
+      textColor: [0, 0, 0],
+      fontSize: 7,
+      fontStyle: 'bold',
+      halign: 'center',
+    },
+    footStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      fontSize: 8,
+      fontStyle: 'bold',
+      halign: 'right',
+      cellPadding: 2,
+    },
+    columnStyles: colStyles,
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.3,
+  })
+
+  const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 3
+
+  doc.setFontSize(7)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('OBSERVACIONES', ml, afterTable + 1)
+  setNormal()
+  doc.setFontSize(7)
+  doc.setTextColor(80)
+  if (data.notes) {
+    const splitNotes = doc.splitTextToSize(data.notes, 180)
+    doc.text(splitNotes, ml + 1, afterTable + 4.5)
+  }
+
+  doc.setFontSize(7)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('RESPONSABLES', ml, afterTable + 17)
+  setNormal()
+  doc.setTextColor(80)
+  doc.text(`Creado por: ${data.createdBy}`, ml, afterTable + 21)
+  doc.text(`Enviado por: ${data.sentBy}`, ml, afterTable + 25)
+  doc.text(`Recibido por: ${data.receivedBy}`, ml, afterTable + 29)
+
+  const sigY = afterTable + 42
+  doc.setLineWidth(0.3)
+  doc.line(ml + 5, sigY - 6, ml + 35, sigY - 6)
+  doc.line(rightX - 35, sigY - 6, rightX - 5, sigY - 6)
+
+  doc.setFontSize(8)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('ENVIADO POR', ml + 20, sigY, { align: 'center' })
+  doc.text('RECIBIDO POR', rightX - 20, sigY, { align: 'center' })
+  setNormal()
+  doc.setFontSize(7)
+  doc.setTextColor(80)
+  doc.text('Firma y sello', ml + 20, sigY + 3, { align: 'center' })
+  doc.text('Firma y sello', rightX - 20, sigY + 3, { align: 'center' })
+
+  doc.save(`traspaso-${data.number}.pdf`)
+}

@@ -6,12 +6,12 @@ import { productSchema } from './types'
 import type { ActionResponse } from './types'
 import type { Products } from '@/shared/types/database.types'
 
-export async function getProductsByCategory(brandId: string, categoryId: string): Promise<ActionResponse<Products[]>> {
+export async function getProductsByCategory(brandId: string, categoryId: string): Promise<ActionResponse<Array<Products & { inventory_items: Array<{ branch_id: string; sale_price: number }> }>>> {
   try {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, inventory_items(branch_id, sale_price)')
       .eq('brand_id', brandId)
       .eq('category_id', categoryId)
       .order('name')
@@ -82,6 +82,11 @@ export async function createProduct(formData: FormData): Promise<ActionResponse>
       await supabase.from('products').update({ image_url: urlData.publicUrl }).eq('id', product.id)
     }
 
+    const { branchId, salePrice } = parsePriceFromForm(formData)
+    if (branchId && salePrice !== null) {
+      await setBranchPrice(product.id, branchId, salePrice)
+    }
+
     revalidatePath(`/brands/${validated.data.brand_id}/categories/${validated.data.category_id}`)
     return { success: true, message: 'Producto creado exitosamente' }
   } catch (e) {
@@ -140,6 +145,11 @@ export async function updateProduct(id: string, brandId: string, categoryId: str
       await supabase.from('products').update({ image_url: urlData.publicUrl }).eq('id', id)
     }
 
+    const { branchId, salePrice } = parsePriceFromForm(formData)
+    if (branchId && salePrice !== null) {
+      await setBranchPrice(id, branchId, salePrice)
+    }
+
     revalidatePath(`/brands/${brandId}/categories/${categoryId}`)
     return { success: true, message: 'Producto actualizado exitosamente' }
   } catch (e) {
@@ -191,6 +201,33 @@ export async function toggleProductStatus(id: string, brandId: string, categoryI
   }
 }
 
+async function setBranchPrice(productId: string, branchId: string, salePrice: number): Promise<void> {
+  const supabase = await createClient()
+  const { data: existing } = await supabase
+    .from('inventory_items')
+    .select('id')
+    .eq('product_id', productId)
+    .eq('branch_id', branchId)
+    .maybeSingle()
+  if (existing) {
+    await supabase.from('inventory_items').update({ sale_price: salePrice }).eq('id', existing.id)
+  } else {
+    await supabase.from('inventory_items').insert({
+      product_id: productId,
+      branch_id: branchId,
+      quantity: 0,
+      sale_price: salePrice,
+    })
+  }
+}
+
+function parsePriceFromForm(formData: FormData): { branchId: string | null; salePrice: number | null } {
+  const branchId = (formData.get('branch_id') as string | null) || null
+  const raw = (formData.get('sale_price') as string | null) || null
+  const salePrice = raw && raw.trim() !== '' ? parseFloat(raw) : null
+  return { branchId, salePrice: salePrice !== null && Number.isFinite(salePrice) ? Math.max(0, salePrice) : null }
+}
+
 export async function getCategoryName(categoryId: string): Promise<ActionResponse<{ name: string; brand_id: string } | null>> {
   try {
     const supabase = await createClient()
@@ -239,19 +276,7 @@ export async function setProductBranchPrice(formData: FormData) {
 
     if (!product_id || !branch_id) return { success: false, message: 'Faltan datos' }
 
-    const supabase = await createClient()
-    const { data: existing } = await supabase
-      .from('inventory_items')
-      .select('id')
-      .eq('product_id', product_id)
-      .eq('branch_id', branch_id)
-      .single()
-
-    if (existing) {
-      await supabase.from('inventory_items').update({ sale_price }).eq('id', existing.id)
-    } else {
-      await supabase.from('inventory_items').insert({ product_id, branch_id, quantity: 0, sale_price })
-    }
+    await setBranchPrice(product_id, branch_id, Math.max(0, sale_price))
 
     return { success: true, message: 'Precio actualizado' }
   } catch (e) {

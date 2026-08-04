@@ -138,6 +138,7 @@ function PurchaseFormInner({
   const [submitting, setSubmitting] = useState(false)
   const [pendingQty, setPendingQty] = useState<Record<string, string>>({})
   const [pendingCost, setPendingCost] = useState<Record<string, string>>({})
+  const [cartCostDraft, setCartCostDraft] = useState<Record<string, string>>({})
 
   const effectiveBranchId = initialBranchId ?? branchId
 
@@ -444,7 +445,6 @@ function PurchaseFormInner({
                     )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{item.product_name}</p>
-                      {showCost && <p className="text-xs text-muted-foreground">Bs {item.unit_cost.toFixed(2)} c/u</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -458,6 +458,27 @@ function PurchaseFormInner({
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
+                  {showCost && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground sm:hidden">Costo:</span>
+                      <div className="w-20 sm:w-24 shrink-0">
+                        <Input type="text" inputMode="decimal"
+                          value={cartCostDraft[item.product_id] ?? String(Number(item.unit_cost.toFixed(4)))}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setCartCostDraft(prev => ({ ...prev, [item.product_id]: v }))
+                            const parsed = parseFloat(v)
+                            if (!isNaN(parsed)) updateItem(item.product_id, 'unit_cost', parsed)
+                          }}
+                          onBlur={() => setCartCostDraft(prev => {
+                            const n = { ...prev }
+                            delete n[item.product_id]
+                            return n
+                          })}
+                          className="h-8 sm:h-7 text-xs font-mono text-right" />
+                      </div>
+                    </div>
+                  )}
                   {showCost && (
                     <div className="text-right min-w-[80px]">
                       <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.unit_cost).toFixed(2)}</p>

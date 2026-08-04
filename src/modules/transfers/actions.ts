@@ -20,6 +20,9 @@ export async function getTransfers(params?: {
   branchId?: string
   page?: number
   pageSize?: number
+  dateFrom?: string
+  dateTo?: string
+  search?: string
 }) {
   try {
     const supabase = await createClient()
@@ -35,6 +38,14 @@ export async function getTransfers(params?: {
       .range(from, to)
 
     if (params?.branchId) query = query.or(`from_branch_id.eq.${params.branchId},to_branch_id.eq.${params.branchId}`)
+    if (params?.dateFrom) query = query.gte('created_at', params.dateFrom)
+    if (params?.dateTo) query = query.lte('created_at', params.dateTo)
+    if (params?.search?.trim()) {
+      const term = params.search.trim()
+      query = query.or(
+        `number::text.ilike.%${term}%,status.ilike.%${term}%,from_branch.name.ilike.%${term}%,to_branch.name.ilike.%${term}%`
+      )
+    }
 
     const { data, error, count } = await query
     if (error) throw new Error(error.message)
@@ -77,7 +88,7 @@ export async function getTransferById(id: string) {
     const supabase = await createClient()
     const { data: transfer, error } = await supabase
       .from('transfers')
-      .select('*, from_branch:branches!from_branch_id(name), to_branch:branches!to_branch_id(name)')
+      .select('*, from_branch:branches!from_branch_id(name, address, phone), to_branch:branches!to_branch_id(name, address, phone)')
       .eq('id', id)
       .single()
     if (error) throw new Error(error.message)
