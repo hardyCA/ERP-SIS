@@ -25,6 +25,7 @@ import { useState, useRef, useMemo } from 'react'
 import { Package, ImageUp, CircleDollarSign, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { useShowCost } from '@/shared/lib/use-role'
+import { UnitSelector } from '@/modules/units/components/unit-selector'
 
 interface ProductFormProps {
   brandId: string
@@ -81,6 +82,7 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
       name: product.name,
       brand_id: brandId,
       category_id: categoryId,
+      unit_id: (product.unit_id as string | null) ?? null,
       sale_price: currentBranchPrice,
     } : undefined,
   })
@@ -102,6 +104,7 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
     formData.set('name', data.name)
     formData.set('brand_id', brandId)
     formData.set('category_id', categoryId)
+    if (data.unit_id) formData.set('unit_id', data.unit_id)
     if (branchId) {
       formData.set('branch_id', branchId)
       formData.set('sale_price', data.sale_price !== undefined ? String(data.sale_price) : '')
@@ -161,6 +164,27 @@ export function ProductForm({ brandId, categoryId, productId, onSuccess }: Produ
                           <div className="relative">
                             <Package className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input placeholder="Ej: Camiseta básica negra" className="pl-8" {...field} />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="unit_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unidad de medida</FormLabel>
+                        <FormControl>
+                          <div className="space-y-1">
+                            <UnitSelector
+                              value={field.value ?? null}
+                              onChange={(id) => field.onChange(id)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Si la unidad no existe, puedes registrarla desde aquí.
+                            </p>
                           </div>
                         </FormControl>
                         <FormMessage />

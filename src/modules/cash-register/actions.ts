@@ -16,10 +16,14 @@ async function getAdminClient() {
   )
 }
 
+const incomeTypes = ['cash_sale', 'credit_payment', 'manual_income', 'cash_transfer_in']
+const expenseTypes = ['manual_expense', 'owner_withdrawal', 'cash_transfer_out']
+
 export async function getMovements(params?: {
   branchId?: string
   page?: number
   pageSize?: number
+  filter?: 'all' | 'income' | 'expense'
 }) {
   try {
     const supabase = await createClient()
@@ -35,12 +39,14 @@ export async function getMovements(params?: {
       .range(from, to)
 
     if (params?.branchId) query = query.eq('branch_id', params.branchId)
+    if (params?.filter === 'income') query = query.in('type', incomeTypes)
+    if (params?.filter === 'expense') query = query.in('type', expenseTypes)
 
     const { data, error, count } = await query
     if (error) throw new Error(error.message)
 
     const admin = await getAdminClient()
-    const userIds = [...new Set((data ?? []).map(m => m.created_by).filter(Boolean))]
+    const userIds = [...new Set((data ?? []).flatMap(m => [m.created_by, m.handler_user_id]).filter(Boolean))]
     const userMap: Record<string, string> = {}
     if (userIds.length > 0) {
       const { data: users } = await admin.auth.admin.listUsers()
@@ -52,9 +58,29 @@ export async function getMovements(params?: {
     const enriched = (data ?? []).map(m => ({
       ...m,
       created_by_name: m.created_by ? userMap[m.created_by] ?? 'Usuario' : null,
+      handler_name: m.handler_user_id ? userMap[m.handler_user_id] ?? 'Usuario' : null,
     }))
 
     return { success: true, data: enriched, total: count ?? 0 }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function getCashUsers(): Promise<ActionResponse<Array<{ id: string; name: string }>>> {
+  try {
+    const admin = await getAdminClient()
+    const { data, error } = await admin.auth.admin.listUsers()
+    if (error) throw new Error(error.message)
+
+    const users = (data?.users ?? [])
+      .map(u => ({
+        id: u.id,
+        name: (u.user_metadata?.full_name as string) || u.email || u.phone || 'Usuario',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return { success: true, message: '', data: users }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -137,8 +163,9 @@ export async function createMovement(formData: FormData): Promise<ActionResponse
     const cash_amount = formData.get('cash_amount') as string || '0'
     const qr_amount = formData.get('qr_amount') as string || '0'
     const description = formData.get('description') as string
+    const handler_user_id = formData.get('handler_user_id') as string
 
-    const validated = createMovementSchema.safeParse({ branch_id, type, amount, transfer_method, cash_amount, qr_amount, description })
+    const validated = createMovementSchema.safeParse({ branch_id, type, amount, transfer_method, cash_amount, qr_amount, description, handler_user_id })
     if (!validated.success) {
       return { success: false, message: 'Datos inválidos', errors: validated.error.flatten().fieldErrors }
     }
@@ -174,6 +201,7 @@ export async function createMovement(formData: FormData): Promise<ActionResponse
       qr_amount: qrPart,
       description: desc,
       created_by: user?.id,
+      handler_user_id: validated.data.handler_user_id,
     })
     if (error) throw new Error(error.message)
 
@@ -298,6 +326,7 @@ export async function createCashTransfer(formData: FormData): Promise<ActionResp
       reference_type: 'cash_transfer',
       reference_id: transferId,
       created_by: user?.id,
+      handler_user_id: user?.id,
     })
     if (errorOut) throw new Error(errorOut.message)
 
@@ -312,6 +341,7 @@ export async function createCashTransfer(formData: FormData): Promise<ActionResp
       reference_type: 'cash_transfer',
       reference_id: transferId,
       created_by: user?.id,
+      handler_user_id: user?.id,
     })
     if (errorIn) throw new Error(errorIn.message)
 

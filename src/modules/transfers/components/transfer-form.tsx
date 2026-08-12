@@ -30,6 +30,7 @@ interface LineItem {
   product_id: string
   product_name: string
   image_url: string | null
+  unit: string | null
   quantity: number
   unit_cost: number
   stock: number
@@ -39,6 +40,7 @@ interface ProductToAdd {
   id: string
   name: string
   image_url: string | null
+  unit: string | null
   cost: number
   stock: number
 }
@@ -90,7 +92,16 @@ export function TransferForm() {
 
   const brands = (brandsData?.success ? (brandsData.data ?? []) : []) as Array<{ id: string; name: string }>
   const categories = (categoriesData?.success ? (categoriesData.data ?? []) : []) as Array<{ id: string; name: string }>
-  const allProducts = (productsData?.success ? (productsData.data ?? []) : []) as Array<ProductToAdd>
+  const allProducts = ((productsData?.success ? (productsData.data ?? []) : [])).map((p) => {
+    const rawUnit = (p as { units_of_measure?: unknown }).units_of_measure
+    const u = Array.isArray(rawUnit)
+      ? (rawUnit as Array<{ name: string; abbreviation: string | null }>)[0] ?? null
+      : ((rawUnit as { name: string; abbreviation: string | null } | null | undefined) ?? null)
+    return {
+      ...(p as object),
+      unit: u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null,
+    }
+  }) as Array<ProductToAdd>
   const branches = (branchesData?.success ? (branchesData.data ?? []) : []) as Array<{ id: string; name: string }>
 
   const products = allProducts.filter(p => p.stock > 0 && !items.some(i => i.product_id === p.id))
@@ -103,6 +114,7 @@ export function TransferForm() {
       product_id: product.id,
       product_name: product.name,
       image_url: product.image_url,
+      unit: product.unit ?? null,
       quantity: qty,
       unit_cost: product.cost,
       stock: product.stock,
@@ -292,7 +304,7 @@ export function TransferForm() {
                           </div>
                         )}
                       </div>
-                      <p className="flex-1 text-xs font-medium truncate min-w-0">{product.name}</p>
+                      <p className="flex-1 text-xs font-medium truncate min-w-0">{product.name}{product.unit && <span className="ml-1 font-normal text-[10px] text-muted-foreground">({product.unit})</span>}</p>
                       <p className={cn('w-14 shrink-0 text-[11px] font-mono text-right', product.stock <= 3 ? 'text-destructive font-medium' : 'text-muted-foreground')}>
                         {product.stock}
                       </p>
@@ -359,7 +371,7 @@ export function TransferForm() {
                     )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{item.product_name}</p>
-                      <p className="text-xs text-muted-foreground">Stock: {item.stock} | Bs {item.unit_cost.toFixed(2)} c/u</p>
+                      <p className="text-xs text-muted-foreground">Stock: {item.stock} | Bs {item.unit_cost.toFixed(2)} c/u{item.unit ? ` (${item.unit})` : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

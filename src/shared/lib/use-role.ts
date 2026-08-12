@@ -30,3 +30,23 @@ export function useShowCost() {
 
   return show
 }
+
+export function useCurrentUser(): { name: string; isLoading: boolean } {
+  const [name, setName] = useState('Usuario')
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const supabase = createClient()
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const meta = user.user_metadata as Record<string, unknown> | undefined
+        const fullName = (meta?.full_name as string) || ''
+        setName(fullName || user.email || user.phone || 'Usuario')
+      }
+      setIsLoading(false)
+    })()
+  }, [])
+
+  return { name, isLoading }
+}

@@ -44,6 +44,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - [x] Migraciones 010–015 ejecutadas en Supabase y verificadas con `scripts/verify-production.js` (columnas, RLS en todas las tablas incl. customers, RPCs protegidos)
 - [x] Registro público eliminado: /register removido, login sin "crear cuenta" ni "olvidé contraseña". La creación de usuarios y el restablecimiento de contraseña son SOLO por admin desde /users (assertAdmin + service role). El email de recuperación (auth/callback) fue descartado por decisión del usuario
 - [x] Verificación de producción: `node scripts/verify-production.js` (todo verde)
+- [x] Reporte de ventas: filtro por vendedor (dropdown con usuarios + columna vendedor), export PDF + imprimir, total neto en pie de tabla (migración no requerida)
+- [x] Caja Chica: pestañas Todos/Ingresos/Egresos, movimientos separados por tipo con totales efectivo/QR
+- [x] Caja Chica: campo "Cobró / Retiró" (handler_user_id, migración 016 ejecutada, backfill ok). Ventas, pagos de crédito y transferencias registran handler_user_id = usuario que cobró/retiró
+- [x] verify-production.js incluye chequeo de handler_user_id
+- [x] Ventas: soft delete (anular, no borrar). RPC delete_sale ahora marca deleted_at en vez de borrar la fila; lista de ventas con pestañas Activas/Anuladas y badge "Anulada" con fecha; detalle muestra banner "Venta anulada" sin botones de eliminar/cobrar (migración 017 pendiente de ejecutar)
 
 ### 🔜 Próximos pasos
 - Fase 7: Pulido, pruebas, despliegue

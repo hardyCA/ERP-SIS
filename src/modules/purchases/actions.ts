@@ -79,7 +79,7 @@ export async function getPurchaseById(id: string) {
 
     const { data: items } = await supabase
       .from('purchase_items')
-      .select('*, products(name, image_url)')
+      .select('*, products(name, image_url, units_of_measure(name, abbreviation))')
       .eq('purchase_id', id)
 
     const { data: expenses } = await supabase
@@ -117,7 +117,7 @@ export async function searchProducts(query: string): Promise<ActionResponse<Prod
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, units_of_measure(name, abbreviation)')
       .eq('is_active', true)
       .ilike('name', `%${query}%`)
       .order('name')

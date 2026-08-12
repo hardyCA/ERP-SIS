@@ -137,6 +137,7 @@ export interface CashRegisterMovements {
   reference_id?: string
   description?: string
   created_by?: string
+  handler_user_id?: string
   created_at: string
 }
 
@@ -172,8 +173,18 @@ export interface Products {
   name: string
   brand_id?: string
   category_id?: string
+  unit_id?: string | null
   cost: number
   image_url?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UnitsOfMeasure {
+  id: string
+  name: string
+  abbreviation?: string
   is_active: boolean
   created_at: string
   updated_at: string
@@ -228,6 +239,7 @@ export interface Sales {
   customer_id?: string
   created_at: string
   updated_at: string
+  deleted_at?: string | null
 }
 
 export interface SaleCredits {
@@ -375,6 +387,11 @@ export type Database = {
         Row: Transfers
         Insert: Partial<Transfers>
         Update: Partial<Transfers>
+      }
+      units_of_measure: {
+        Row: UnitsOfMeasure
+        Insert: Partial<UnitsOfMeasure>
+        Update: Partial<UnitsOfMeasure>
       }
       user_branches: {
         Row: UserBranches

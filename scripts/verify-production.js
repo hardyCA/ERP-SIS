@@ -13,11 +13,14 @@ async function checkColumns() {
     ['cash_register_movements', 'payment_method'],
     ['cash_register_movements', 'cash_amount'],
     ['cash_register_movements', 'qr_amount'],
+    ['cash_register_movements', 'handler_user_id'],
     ['customers', 'address'],
     ['customers', 'document_id'],
     ['purchases', 'supplier_id'],
     ['purchases', 'status'],
     ['sales', 'discount'],
+    ['sales', 'deleted_at'],
+    ['products', 'unit_id'],
   ]
   for (const [table, column] of checks) {
     const { error } = await service.from(table).select(column).limit(1)
@@ -26,7 +29,7 @@ async function checkColumns() {
 }
 
 async function checkAnonLocked() {
-  const tables = ['customers', 'suppliers', 'menu_items', 'purchases', 'cash_register_movements', 'user_branches', 'products']
+  const tables = ['customers', 'suppliers', 'menu_items', 'purchases', 'cash_register_movements', 'user_branches', 'products', 'units_of_measure']
   for (const table of tables) {
     const [{ data: anonData, error: anonErr }, { count, error: svcErr }] = await Promise.all([
       anon.from(table).select('*').limit(1),

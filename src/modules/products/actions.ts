@@ -6,12 +6,15 @@ import { productSchema } from './types'
 import type { ActionResponse } from './types'
 import type { Products } from '@/shared/types/database.types'
 
-export async function getProductsByCategory(brandId: string, categoryId: string): Promise<ActionResponse<Array<Products & { inventory_items: Array<{ branch_id: string; sale_price: number }> }>>> {
+export async function getProductsByCategory(brandId: string, categoryId: string): Promise<ActionResponse<Array<Products & {
+  units_of_measure: { name: string; abbreviation: string | null } | null
+  inventory_items: Array<{ branch_id: string; sale_price: number }>
+}>>> {
   try {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('products')
-      .select('*, inventory_items(branch_id, sale_price)')
+      .select('*, units_of_measure(name, abbreviation), inventory_items(branch_id, sale_price)')
       .eq('brand_id', brandId)
       .eq('category_id', categoryId)
       .order('name')
@@ -27,7 +30,7 @@ export async function getProductById(id: string): Promise<ActionResponse<Product
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('products')
-      .select('*, brands(name), categories(name)')
+      .select('*, brands(name), categories(name), units_of_measure(name, abbreviation)')
       .eq('id', id)
       .single()
     if (error) throw new Error(error.message)
@@ -43,6 +46,7 @@ export async function createProduct(formData: FormData): Promise<ActionResponse>
       name: formData.get('name'),
       brand_id: formData.get('brand_id'),
       category_id: formData.get('category_id'),
+      unit_id: (formData.get('unit_id') as string || null),
     })
     if (!validated.success) {
       return {
@@ -64,7 +68,12 @@ export async function createProduct(formData: FormData): Promise<ActionResponse>
 
     const { data: product, error } = await supabase
       .from('products')
-      .insert(validated.data)
+      .insert({
+        name: validated.data.name,
+        brand_id: validated.data.brand_id,
+        category_id: validated.data.category_id,
+        unit_id: validated.data.unit_id ?? null,
+      })
       .select()
       .single()
     if (error) throw new Error(error.message)
@@ -100,6 +109,7 @@ export async function updateProduct(id: string, brandId: string, categoryId: str
       name: formData.get('name'),
       brand_id: brandId,
       category_id: categoryId,
+      unit_id: (formData.get('unit_id') as string || null),
     })
     if (!validated.success) {
       return {
@@ -122,7 +132,7 @@ export async function updateProduct(id: string, brandId: string, categoryId: str
 
     const { error } = await supabase
       .from('products')
-      .update({ name: validated.data.name })
+      .update({ name: validated.data.name, unit_id: validated.data.unit_id ?? null })
       .eq('id', id)
     if (error) throw new Error(error.message)
 

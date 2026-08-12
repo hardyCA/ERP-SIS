@@ -20,6 +20,7 @@ export interface SalesReportItem {
   payment_type: string
   customer_name: string | null
   created_at: string
+  created_by: string | null
   created_by_name: string | null
   branches: { name: string } | null
 }
@@ -29,6 +30,7 @@ export interface InventoryReportItem {
   product_name: string
   brand_name: string
   category_name: string
+  unit: string | null
   cost: number
   sale_price: number
   quantity: number
@@ -55,6 +57,8 @@ export interface CreditReportItem {
   created_at: string
   payment_count: number
   days: number
+  created_by: string | null
+  created_by_name: string | null
 }
 
 export interface ProfitReportItem {

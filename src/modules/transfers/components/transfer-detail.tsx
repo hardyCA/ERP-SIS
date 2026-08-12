@@ -56,8 +56,14 @@ export function TransferDetail({ transferId }: TransferDetailProps) {
     product_id: string
     quantity: number
     unit_cost: number
-    products: { name: string; image_url: string | null } | null
+    products: { name: string; image_url: string | null; units_of_measure: { name: string; abbreviation: string | null } | null } | null
   }>
+
+  const getUnitLabel = (product: (typeof items)[number]['products']): string | null => {
+    const u = product?.units_of_measure
+    if (!u) return null
+    return u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name
+  }
 
   const statusInfo = statusLabels[transfer.status as string] ?? { label: transfer.status as string, variant: 'secondary' as const }
 
@@ -175,8 +181,10 @@ export function TransferDetail({ transferId }: TransferDetailProps) {
                         <div className="h-8 w-8 rounded bg-muted flex items-center justify-center"><Package className="h-4 w-4" /></div>
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">{item.products?.name ?? '—'}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell className="font-medium">{item.products?.name ?? '—'}{getUnitLabel(item.products) && (
+                      <span className="ml-2 text-xs text-muted-foreground font-normal">({getUnitLabel(item.products)})</span>
+                    )}</TableCell>
+                    <TableCell>{item.quantity}{getUnitLabel(item.products) ? ` ${getUnitLabel(item.products)}` : ''}</TableCell>
                     {showCost && <TableCell>Bs {Number(item.unit_cost).toFixed(2)}</TableCell>}
                   </TableRow>
                 ))}

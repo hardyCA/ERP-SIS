@@ -31,6 +31,7 @@ const paymentConfig: Record<string, { label: string; variant: 'default' | 'secon
 export function SaleList() {
   const { branchId } = useBranch()
   const [page, setPage] = useState(1)
+  const [status, setStatus] = useState<'active' | 'deleted'>('active')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [appliedFrom, setAppliedFrom] = useState('')
@@ -40,9 +41,10 @@ export function SaleList() {
   useEffect(() => { setPage(1) }, [branchId])
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['sales', branchId, appliedFrom, appliedTo, page],
+    queryKey: ['sales', branchId, status, appliedFrom, appliedTo, page],
     queryFn: () => getSales({
       branchId: branchId || undefined,
+      status,
       fromDate: appliedFrom || undefined,
       toDate: appliedTo || undefined,
       page,
@@ -75,6 +77,22 @@ export function SaleList() {
     <div className="space-y-4">
       {/* Filters bar */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3">
+        <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => { setStatus('active'); setPage(1) }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${status === 'active' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Activas
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStatus('deleted'); setPage(1) }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${status === 'deleted' ? 'bg-background shadow-sm text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Anuladas
+          </button>
+        </div>
         <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">Desde</label>
@@ -133,7 +151,11 @@ export function SaleList() {
                 {sales.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                      {hasFilters ? 'No hay ventas en este rango de fechas' : 'No hay ventas registradas'}
+                      {hasFilters
+                        ? 'No hay ventas en este rango de fechas'
+                        : status === 'deleted'
+                          ? 'No hay ventas anuladas'
+                          : 'No hay ventas registradas'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -143,14 +165,18 @@ export function SaleList() {
                   const credits = (s.sale_credits as Array<Record<string, unknown>>) || []
                   const activeCredit = credits.find((c: Record<string, unknown>) => (c.balance as number) > 0)
                   const creditBalance = activeCredit ? (activeCredit.balance as number) : 0
+                  const isDeleted = !!s.deleted_at
                   return (
-                    <TableRow key={s.id as string}>
+                    <TableRow key={s.id as string} className={isDeleted ? 'opacity-60' : ''}>
                       <TableCell className="font-mono text-xs">#{(s.number as number)?.toString().padStart(4, '0') ?? (s.id as string).slice(0, 8)}</TableCell>
                       <TableCell className="text-sm">{((s.branches as Record<string, unknown>)?.name as string) ?? '—'}</TableCell>
                       <TableCell className="font-mono text-sm">Bs {Number(s.total).toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge variant={cfg.variant} className="text-[10px]">{cfg.label}</Badge>
-                        {pt === 'credit' && (
+                        {isDeleted && (
+                          <Badge variant="destructive" className="ml-1.5 text-[10px]">Anulada</Badge>
+                        )}
+                        {pt === 'credit' && !isDeleted && (
                           <span className="ml-1.5 text-[10px] text-destructive font-medium">
                             {creditBalance > 0 ? `Saldo: Bs ${creditBalance.toFixed(2)}` : 'Pagado'}
                           </span>
@@ -162,7 +188,14 @@ export function SaleList() {
                           : (s.customer_name as string) ?? '—'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{(s.created_by_name as string) ?? '—'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{new Date(s.created_at as string).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(s.created_at as string).toLocaleDateString()}
+                        {isDeleted && (
+                          <span className="block text-[10px] text-destructive">
+                            Anulada {new Date(s.deleted_at as string).toLocaleDateString()}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Link href={`/sales/${s.id}`}>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -180,7 +213,7 @@ export function SaleList() {
           {/* Pagination */}
           <div className="flex items-center justify-between text-sm">
             <p className="text-xs text-muted-foreground">
-              {total} venta{total !== 1 ? 's' : ''} · Página {page} de {totalPages}
+              {total} venta{total !== 1 ? 's' : ''} {status === 'deleted' ? 'anulada' : ''} · Página {page} de {totalPages}
             </p>
             <div className="flex items-center gap-1">
               <Button variant="outline" size="sm" className="h-8 w-8 p-0"

@@ -111,7 +111,7 @@ export function TransferList() {
       return
     }
     const t = res.data as Record<string, unknown>
-    const items = (t.items ?? []) as Array<{ quantity: number; unit_cost: number; products: { name: string | null } | null }>
+    const items = (t.items ?? []) as Array<{ quantity: number; unit_cost: number; products: { name: string | null; units_of_measure: { name: string; abbreviation: string | null } | null } | null }>
     const statusLabel: Record<string, string> = {
       pending: 'Pendiente',
       sent: 'Enviado',
@@ -134,11 +134,16 @@ export function TransferList() {
       receivedBy: (t.received_by_name as string) ?? '—',
       statusLabel: statusLabel[t.status as string] ?? (t.status as string),
       notes: (t.notes as string) ?? null,
-      items: items.map(i => ({
-        product_name: i.products?.name ?? '—',
-        quantity: Number(i.quantity),
-        unit_cost: Number(i.unit_cost),
-      })),
+      items: items.map(i => {
+        const p = i.products
+        const u = p?.units_of_measure
+        const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
+        return {
+          product_name: p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—',
+          quantity: Number(i.quantity),
+          unit_cost: Number(i.unit_cost),
+        }
+      }),
     }, showCost)
   }
 

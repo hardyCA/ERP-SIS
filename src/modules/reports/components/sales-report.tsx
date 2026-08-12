@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getSalesReport } from '../actions'
+import { getSalesReport, getSalesSellers } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -13,13 +13,21 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
 import { Card, CardContent } from '@/shared/components/ui/card'
-import { CalendarDays, CalendarRange, Calendar, FileSpreadsheet } from 'lucide-react'
-import { exportToExcel } from '@/shared/lib/export'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
+import { CalendarDays, CalendarRange, Calendar, FileSpreadsheet, FileText, Printer, UserCircle } from 'lucide-react'
+import { exportToExcel, exportToPdf, printElement } from '@/shared/lib/export'
 
 type Period = 'day' | 'month' | 'year' | 'custom'
 
@@ -52,6 +60,7 @@ function calcPeriodDates(period: Period): { dateFrom: string; dateTo: string } {
 export function SalesReport() {
   const { branchId } = useBranch()
   const [period, setPeriod] = useState<Period>('day')
+  const [sellerId, setSellerId] = useState('all')
 
   const today = toDateInput(new Date())
   const [dateFrom, setDateFrom] = useState(today)
@@ -89,10 +98,18 @@ export function SalesReport() {
   }, [])
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['sales-report', branchId, filters],
-    queryFn: () => getSalesReport(branchId || undefined, filters.dateFrom, filters.dateTo),
+    queryKey: ['sales-report', branchId, filters, sellerId],
+    queryFn: () => getSalesReport(branchId || undefined, filters.dateFrom, filters.dateTo, sellerId === 'all' ? undefined : sellerId),
     staleTime: 0,
   })
+
+  const { data: sellersResult } = useQuery({
+    queryKey: ['sales-sellers', branchId],
+    queryFn: () => getSalesSellers(branchId || undefined),
+    staleTime: 60_000,
+  })
+
+  const sellers = (sellersResult?.success ? sellersResult.data : []) ?? []
 
   const sales = (result?.success ? result.data : []) ?? []
   const totalAmount = sales.reduce((sum, s) => sum + s.total, 0)
@@ -109,6 +126,44 @@ export function SalesReport() {
     qr: 'info',
     mixed: 'warning',
     credit: 'pending',
+  }
+
+  const totalDescuento = sales.reduce((sum, s) => sum + s.discount, 0)
+  const subtotal = totalAmount + totalDescuento
+
+  const sellerName = sellerId === 'all' ? 'Todos' : (sellers.find(s => s.id === sellerId)?.name ?? '')
+  const subtitle = `Desde ${new Date(filters.dateFrom).toLocaleDateString('es-MX')} hasta ${new Date(filters.dateTo).toLocaleDateString('es-MX')} · Vendedor: ${sellerName}`
+
+  const exportSalesPdf = () => {
+    exportToPdf(
+      'Reporte de Ventas',
+      subtitle,
+      [
+        { header: '#', dataKey: '#' },
+        { header: 'Vendedor', dataKey: 'Vendedor' },
+        { header: 'Sucursal', dataKey: 'Sucursal' },
+        { header: 'Cliente', dataKey: 'Cliente' },
+        { header: 'Total', dataKey: 'Total' },
+        { header: 'Tipo Pago', dataKey: 'Tipo Pago' },
+        { header: 'Fecha', dataKey: 'Fecha' },
+      ],
+      sales.map((s) => ({
+        '#': `#${s.number.toString().padStart(4, '0')}`,
+        Vendedor: s.created_by_name ?? '—',
+        Sucursal: s.branches?.name ?? '—',
+        Cliente: s.customer_name ?? '—',
+        Total: s.total.toFixed(2),
+        'Tipo Pago': paymentLabels[s.payment_type] ?? s.payment_type,
+        Fecha: new Date(s.created_at).toLocaleDateString('es-MX'),
+      })),
+      [
+        { label: 'Ventas', value: sales.length.toString() },
+        { label: 'Subtotal', value: `Bs ${subtotal.toFixed(2)}` },
+        { label: 'Descuentos', value: `Bs ${totalDescuento.toFixed(2)}` },
+        { label: 'Total neto', value: `Bs ${totalAmount.toFixed(2)}` },
+      ],
+      `reporte-ventas-${dateFrom}-${dateTo}`
+    )
   }
 
   return (
@@ -139,6 +194,7 @@ export function SalesReport() {
                 onClick={() => {
                   const data = sales.map((s) => ({
                     '#': s.number.toString().padStart(4, '0'),
+                    Vendedor: s.created_by_name ?? '—',
                     Sucursal: s.branches?.name ?? '—',
                     Cliente: s.customer_name ?? '—',
                     Total: s.total.toFixed(2),
@@ -149,6 +205,14 @@ export function SalesReport() {
                   exportToExcel(data, `ventas-${dateFrom}-${dateTo}`, 'Ventas')
                 }}>
                 <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-[11px]"
+                onClick={exportSalesPdf}>
+                <FileText className="h-3 w-3 mr-1" /> PDF
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-[11px]"
+                onClick={() => printElement('sales-report-print')}>
+                <Printer className="h-3 w-3 mr-1" /> Imprimir
               </Button>
               <div className="text-sm text-muted-foreground">
                 <span className="font-semibold text-foreground">{sales.length}</span> venta(s) —{' '}
@@ -176,6 +240,25 @@ export function SalesReport() {
                 className="h-8"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Vendedor</label>
+              <Select value={sellerId} onValueChange={(v) => setSellerId(v ?? 'all')}>
+                <SelectTrigger size="sm" className="h-8 min-w-44">
+                  <UserCircle className="h-4 w-4" />
+                  <SelectValue>
+                    {sellerId === 'all'
+                      ? 'Todos'
+                      : sellers.find(s => s.id === sellerId)?.name ?? 'Seleccionar'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {sellers.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button size="sm" onClick={applyCustom}>Filtrar</Button>
             {period !== 'day' && (
               <Button size="sm" variant="outline" onClick={resetToToday}>Hoy</Button>
@@ -190,10 +273,47 @@ export function SalesReport() {
         </div>
       ) : (
         <div className="rounded-lg border">
-          <Table>
+            <div id="sales-report-print" className="hidden">
+              <h1>Reporte de Ventas</h1>
+              <h2>{subtitle}</h2>
+              <div className="summary">
+                <div className="summary-row"><span>Ventas</span><span>{sales.length}</span></div>
+                <div className="summary-row"><span>Subtotal</span><span>Bs {subtotal.toFixed(2)}</span></div>
+                <div className="summary-row"><span>Descuentos</span><span>Bs {totalDescuento.toFixed(2)}</span></div>
+                <div className="summary-row total-row"><span>Total neto</span><span>Bs {totalAmount.toFixed(2)}</span></div>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Vendedor</th>
+                    <th>Sucursal</th>
+                    <th>Cliente</th>
+                    <th>Total</th>
+                    <th>Tipo Pago</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((s) => (
+                    <tr key={s.id}>
+                      <td>#{s.number.toString().padStart(4, '0')}</td>
+                      <td>{s.created_by_name ?? '—'}</td>
+                      <td>{s.branches?.name ?? '—'}</td>
+                      <td>{s.customer_name ?? '—'}</td>
+                      <td>Bs {s.total.toFixed(2)}</td>
+                      <td>{paymentLabels[s.payment_type] ?? s.payment_type}</td>
+                      <td>{new Date(s.created_at).toLocaleDateString('es-MX')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>#</TableHead>
+                <TableHead>Vendedor</TableHead>
                 <TableHead>Sucursal</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Total</TableHead>
@@ -204,12 +324,13 @@ export function SalesReport() {
             <TableBody>
               {sales.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Sin resultados</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin resultados</TableCell>
                 </TableRow>
               )}
               {sales.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono">#{s.number.toString().padStart(4, '0')}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{s.created_by_name ?? '—'}</TableCell>
                   <TableCell>{s.branches?.name ?? '—'}</TableCell>
                   <TableCell>{s.customer_name ?? '—'}</TableCell>
                   <TableCell>Bs {s.total.toFixed(2)}</TableCell>
@@ -235,6 +356,15 @@ export function SalesReport() {
                 </TableRow>
               ))}
             </TableBody>
+            {sales.length > 0 && (
+              <TableFooter>
+                <TableRow className="font-semibold">
+                  <TableCell colSpan={4} className="text-right">Total neto</TableCell>
+                  <TableCell>Bs {totalAmount.toFixed(2)}</TableCell>
+                  <TableCell colSpan={2} />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </div>
       )}

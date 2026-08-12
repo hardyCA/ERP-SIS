@@ -93,6 +93,8 @@ export async function registerPayment(formData: FormData): Promise<ActionRespons
         reference_type: 'sale',
         reference_id: credit.sale_id,
         description: `Pago de crédito - Venta #${sale.number}`,
+        created_by: user?.id,
+        handler_user_id: user?.id,
       })
     }
 

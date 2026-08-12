@@ -20,6 +20,7 @@ CREATE TABLE menu_items (
 INSERT INTO menu_items (group_title, name, href, icon, sort_order, required_role) VALUES
     ('Visión General', 'Panel Principal', '/', 'LayoutDashboard', 10, NULL),
     ('Inventario y Catálogo', 'Catálogo', '/brands', 'FolderTree', 20, NULL),
+    ('Inventario y Catálogo', 'Unidad de Medida', '/brands?tab=units', 'Ruler', 25, NULL),
     ('Inventario y Catálogo', 'Inventario', '/inventory', 'Warehouse', 30, NULL),
     ('Inventario y Catálogo', 'Proveedores', '/suppliers', 'Truck', 40, NULL),
     ('Inventario y Catálogo', 'Traspasos', '/transfers', 'ArrowLeftRight', 50, NULL),

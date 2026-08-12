@@ -95,7 +95,7 @@ export async function getTransferById(id: string) {
 
     const { data: items } = await supabase
       .from('transfer_items')
-      .select('*, products(name, image_url)')
+      .select('*, products(name, image_url, units_of_measure(name, abbreviation))')
       .eq('transfer_id', id)
 
     const admin = await getAdminClient()
@@ -136,7 +136,7 @@ export async function getTransferProducts(brandId: string, categoryId: string, b
     const supabase = await createClient()
     const { data: products, error } = await supabase
       .from('products')
-      .select('id, name, image_url, cost')
+      .select('id, name, image_url, cost, units_of_measure(name, abbreviation)')
       .eq('brand_id', brandId)
       .eq('category_id', categoryId)
       .eq('is_active', true)
@@ -170,7 +170,7 @@ export async function searchProducts(query: string, branchId?: string) {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, image_url, cost')
+      .select('id, name, image_url, cost, units_of_measure(name, abbreviation)')
       .eq('is_active', true)
       .ilike('name', `%${query}%`)
       .order('name')

@@ -33,6 +33,7 @@ interface LineItem {
   quantity: number
   price: number
   stock: number
+  unit: string | null
 }
 
 interface ProductToAdd {
@@ -41,6 +42,7 @@ interface ProductToAdd {
   image_url: string | null
   sale_price: number
   stock: number
+  unit: string | null
 }
 
 export function SaleForm() {
@@ -106,7 +108,20 @@ export function SaleForm() {
 
   const brands = (brandsData?.success ? (brandsData.data ?? []) : []) as Array<{ id: string; name: string }>
   const categories = (categoriesData?.success ? (categoriesData.data ?? []) : []) as Array<{ id: string; name: string }>
-  const allProducts = (productsData?.success ? (productsData.data ?? []) : []) as Array<ProductToAdd>
+  const allProducts = ((productsData?.success ? (productsData.data ?? []) : [])).map((p) => {
+    const rawUnit = (p as { units_of_measure?: unknown }).units_of_measure
+    const u = Array.isArray(rawUnit)
+      ? (rawUnit as Array<{ name: string; abbreviation: string | null }>)[0] ?? null
+      : ((rawUnit as { name: string; abbreviation: string | null } | null | undefined) ?? null)
+    return {
+      id: (p as { id: string }).id,
+      name: (p as { name: string }).name,
+      image_url: (p as { image_url: string | null }).image_url,
+      sale_price: (p as { sale_price: number }).sale_price,
+      stock: (p as { stock: number }).stock,
+      unit: u ? (u.abbreviation ?? u.name) : null,
+    }
+  }) as Array<ProductToAdd>
   const customerResults = (customerData?.success ? (customerData.data ?? []) : []) as Array<{ id: string; name: string; phone: string | null }>
 
   const products = allProducts.filter(p => p.stock > 0 && !items.some(i => i.product_id === p.id))
@@ -122,6 +137,7 @@ export function SaleForm() {
       quantity: qty,
       price: product.sale_price,
       stock: product.stock,
+      unit: product.unit,
     }])
     setPendingQty(prev => { const n = { ...prev }; delete n[product.id]; return n })
     toast.success(`${product.name} agregado`)
@@ -316,7 +332,10 @@ export function SaleForm() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold sm:font-medium text-foreground leading-snug break-words sm:truncate">{product.name}</p>
+                            <p className="text-xs font-semibold sm:font-medium text-foreground leading-snug break-words sm:truncate">
+                              {product.name}
+                              {product.unit && <span className="ml-1 font-normal text-[10px] text-muted-foreground">({product.unit})</span>}
+                            </p>
                             <div className="flex items-center gap-2 sm:hidden text-[11px] text-muted-foreground mt-0.5">
                               <span className="font-mono font-medium text-foreground">
                                 {product.sale_price > 0 ? `Bs ${product.sale_price.toFixed(2)}` : '—'}
@@ -468,7 +487,7 @@ export function SaleForm() {
                       )}
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{item.product_name}</p>
-                        <p className="text-xs text-muted-foreground">Bs {item.price.toFixed(2)} c/u</p>
+                        <p className="text-xs text-muted-foreground">Bs {item.price.toFixed(2)} c/u{item.unit ? ` (${item.unit})` : ''}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

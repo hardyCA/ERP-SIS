@@ -28,6 +28,7 @@ export const createMovementSchema = z.object({
   cash_amount: z.coerce.number().min(0).default(0),
   qr_amount: z.coerce.number().min(0).default(0),
   description: z.string().min(1, 'La descripción es requerida'),
+  handler_user_id: z.string().uuid('Selecciona quién cobró o retiró el monto'),
 }).refine(
   (data) => {
     if (data.transfer_method === 'mixed') {

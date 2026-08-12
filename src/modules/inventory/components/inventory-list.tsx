@@ -65,6 +65,12 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
 
   const items = (Array.isArray(result?.data) ? result.data : []) as Array<Record<string, unknown>>
 
+  const getUnit = (item: Record<string, unknown>): string => {
+    const unit = ((item.products as Record<string, unknown> | undefined)?.units_of_measure as Record<string, unknown> | undefined)
+    if (!unit) return ''
+    return (unit.abbreviation as string | null) ?? (unit.name as string)
+  }
+
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items
     return items.filter((item) => {
@@ -170,7 +176,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant={isLowStock ? 'destructive' : 'default'} className="font-mono text-xs px-2.5">
-                          {qty} unidades
+                          {qty} {getUnit(item)}
                         </Badge>
                       </TableCell>
                       {showCost && <TableCell className="font-mono text-xs">Bs {Number(product?.cost ?? 0).toFixed(2)}</TableCell>}
@@ -258,7 +264,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                       </p>
                     </div>
                     <Badge variant={isLowStock ? 'destructive' : 'default'} className="font-mono text-xs shrink-0">
-                      Stock: {qty}
+                      Stock: {qty} {getUnit(item)}
                     </Badge>
                   </div>
 

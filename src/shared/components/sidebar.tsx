@@ -16,7 +16,7 @@ import {
   Activity, TrendingUp, DollarSign, FileText, Printer, Download, Upload,
   RefreshCw, Plus, Minus, X, Check, Search, Menu as MenuIcon,
   MoreHorizontal, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  Circle, Home, Info, AlertTriangle, Shield, type LucideIcon,
+  Circle, Home, Info, AlertTriangle, Shield, Ruler, type LucideIcon,
 } from 'lucide-react'
 import {
   Select,
@@ -33,7 +33,7 @@ const iconMap: Record<string, LucideIcon> = {
   Activity, TrendingUp, DollarSign, FileText, Printer, Download, Upload,
   RefreshCw, Plus, Minus, X, Check, Search, Menu: MenuIcon,
   MoreHorizontal, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  Circle, Home, Info, AlertTriangle, Shield,
+  Circle, Home, Info, AlertTriangle, Shield, Ruler,
 }
 
 interface SidebarProps {

@@ -24,6 +24,7 @@ export async function getSales(params?: {
   toDate?: string
   page?: number
   pageSize?: number
+  status?: 'active' | 'deleted'
 }) {
   try {
     const supabase = await createClient()
@@ -37,6 +38,9 @@ export async function getSales(params?: {
       .select('*, branches(name), customers(name, phone), sale_credits(*)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to)
+
+    if (params?.status === 'deleted') query = query.not('deleted_at', 'is', null)
+    else query = query.is('deleted_at', null)
 
     if (params?.branchId) query = query.eq('branch_id', params.branchId)
     if (params?.fromDate) query = query.gte('created_at', params.fromDate)
@@ -66,19 +70,20 @@ export async function getSales(params?: {
   }
 }
 
-export async function getSaleById(id: string) {
+export async function getSaleById(id: string, includeDeleted = false) {
   try {
     const supabase = await createClient()
-    const { data: sale, error } = await supabase
+    let query = supabase
       .from('sales')
       .select('*, branches(name, address, phone), customers(name, phone), sale_credits(*)')
       .eq('id', id)
-      .single()
+    if (!includeDeleted) query = query.is('deleted_at', null)
+    const { data: sale, error } = await query.single()
     if (error) throw new Error(error.message)
 
     const { data: items } = await supabase
       .from('sale_items')
-      .select('*, products(name, image_url)')
+      .select('*, products(name, image_url, units_of_measure(name, abbreviation))')
       .eq('sale_id', id)
 
     // Fetch payments for each credit
@@ -111,7 +116,7 @@ export async function getSaleProducts(brandId: string, categoryId: string, branc
     const supabase = await createClient()
     const { data: products, error } = await supabase
       .from('products')
-      .select('id, name, image_url, cost')
+      .select('id, name, image_url, cost, units_of_measure(name, abbreviation)')
       .eq('brand_id', brandId)
       .eq('category_id', categoryId)
       .eq('is_active', true)
@@ -146,7 +151,7 @@ export async function searchProducts(query: string, branchId?: string) {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, image_url, cost')
+      .select('id, name, image_url, cost, units_of_measure(name, abbreviation)')
       .eq('is_active', true)
       .ilike('name', `%${query}%`)
       .order('name')
@@ -337,6 +342,8 @@ export async function createSale(formData: FormData): Promise<ActionResponse> {
         description: validated.data.payment_type === 'credit'
           ? `Venta #${sale.number} - Anticipo (Crédito)`
           : `Venta #${sale.number} - Efectivo`,
+        created_by: user?.id,
+        handler_user_id: user?.id,
       })
     }
 
@@ -352,6 +359,8 @@ export async function createSale(formData: FormData): Promise<ActionResponse> {
         reference_type: 'sale',
         reference_id: sale.id,
         description: `Venta #${sale.number} - QR`,
+        created_by: user?.id,
+        handler_user_id: user?.id,
       })
     }
 

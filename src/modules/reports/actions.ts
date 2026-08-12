@@ -30,6 +30,7 @@ export async function getWeeklySalesChart(branchId?: string): Promise<ActionResp
     let query = supabase
       .from('sales')
       .select('total, created_at')
+      .is('deleted_at', null)
       .gte('created_at', sevenDaysAgo.toISOString())
 
     if (branchId) query = query.eq('branch_id', branchId)
@@ -71,6 +72,7 @@ export async function getDashboardStats(branchId?: string): Promise<ActionRespon
     let salesQuery = supabase
       .from('sales')
       .select('total')
+      .is('deleted_at', null)
       .gte('created_at', todayStart.toISOString())
 
     if (branchId) salesQuery = salesQuery.eq('branch_id', branchId)
@@ -154,20 +156,39 @@ export async function getDashboardStats(branchId?: string): Promise<ActionRespon
   }
 }
 
-export async function getSalesReport(branchId?: string, dateFrom?: string, dateTo?: string): Promise<ActionResponse<SalesReportItem[]>> {
+export async function getSalesReport(branchId?: string, dateFrom?: string, dateTo?: string, sellerId?: string): Promise<ActionResponse<SalesReportItem[]>> {
   try {
     const supabase = await createClient()
     let query = supabase
       .from('sales')
       .select('*, branches(name)')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (branchId) query = query.eq('branch_id', branchId)
     if (dateFrom) query = query.gte('created_at', dateFrom)
     if (dateTo) query = query.lte('created_at', dateTo)
+    if (sellerId) query = query.eq('created_by', sellerId)
 
     const { data, error: queryErr } = await query
     if (queryErr) { throw new TypeError(queryErr.message) }
+
+    const userIds = [...new Set((data ?? []).map(s => s.created_by).filter(Boolean))]
+    const userMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { cookies } = await import('next/headers')
+      const { createServerClient } = await import('@supabase/ssr')
+      const cookieStore = await cookies()
+      const admin = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { cookies: { getAll() { return cookieStore.getAll() }, setAll() {} } }
+      )
+      const { data: users } = await admin.auth.admin.listUsers()
+      for (const u of users?.users ?? []) {
+        userMap[u.id] = (u.user_metadata?.full_name as string) || u.email || u.phone || 'Usuario'
+      }
+    }
 
     const enriched = (data ?? []).map(s => ({
       id: s.id,
@@ -176,11 +197,53 @@ export async function getSalesReport(branchId?: string, dateFrom?: string, dateT
       payment_type: s.payment_type,
       customer_name: s.customer_name,
       created_at: s.created_at,
-      created_by_name: null as string | null,
+      created_by: (s.created_by as string | null) ?? null,
+      created_by_name: s.created_by ? (userMap[s.created_by as string] ?? 'Usuario') : null,
       branches: s.branches ? { name: (s.branches as Record<string, unknown>).name as string } : null,
     }))
 
     return { success: true, message: '', data: enriched as SalesReportItem[] }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function getSalesSellers(branchId?: string): Promise<ActionResponse<Array<{ id: string; name: string }>>> {
+  try {
+    const supabase = await createClient()
+    let query = supabase
+      .from('sales')
+      .select('created_by')
+      .is('deleted_at', null)
+      .not('created_by', 'is', null)
+
+    if (branchId) query = query.eq('branch_id', branchId)
+
+    const { data, error: queryErr } = await query
+    if (queryErr) { throw new TypeError(queryErr.message) }
+
+    const userIds = [...new Set((data ?? []).map(s => s.created_by).filter(Boolean))] as string[]
+    const userMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { cookies } = await import('next/headers')
+      const { createServerClient } = await import('@supabase/ssr')
+      const cookieStore = await cookies()
+      const admin = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { cookies: { getAll() { return cookieStore.getAll() }, setAll() {} } }
+      )
+      const { data: users } = await admin.auth.admin.listUsers()
+      for (const u of users?.users ?? []) {
+        userMap[u.id] = (u.user_metadata?.full_name as string) || u.email || u.phone || 'Usuario'
+      }
+    }
+
+    const sellers = userIds
+      .map(id => ({ id, name: userMap[id] ?? 'Usuario' }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return { success: true, message: '', data: sellers }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -192,7 +255,7 @@ export async function getInventoryReport(branchId?: string): Promise<ActionRespo
 
     let query = supabase
       .from('inventory_items')
-      .select('*, products!inner(name, cost, image_url, brands(name), categories(name))')
+      .select('*, products!inner(name, cost, image_url, brands(name), categories(name), units_of_measure(name, abbreviation))')
       .gt('quantity', 0)
 
     if (branchId) query = query.eq('branch_id', branchId)
@@ -204,11 +267,13 @@ export async function getInventoryReport(branchId?: string): Promise<ActionRespo
 
     const items = (data ?? []).map(i => {
       const product = i.products as Record<string, unknown> | undefined
+      const unit = (product?.units_of_measure as Record<string, unknown> | undefined) ?? null
       return {
         product_id: i.product_id as string,
         product_name: (product?.name as string) ?? '—',
         brand_name: ((product?.brands as Record<string, unknown> | undefined)?.name as string) ?? '—',
         category_name: ((product?.categories as Record<string, unknown> | undefined)?.name as string) ?? '—',
+        unit: unit ? (unit.abbreviation as string | null) ?? (unit.name as string) : null,
         cost: Number((product?.cost as number) ?? 0),
         sale_price: Number(i.sale_price as number),
         quantity: i.quantity as number,
@@ -253,38 +318,103 @@ export async function getCashReport(branchId?: string, dateFrom?: string, dateTo
   }
 }
 
-export async function getCreditReport(branchId?: string): Promise<ActionResponse<CreditReportItem[]>> {
+export async function getCreditReport(branchId?: string, sellerId?: string): Promise<ActionResponse<CreditReportItem[]>> {
   try {
     const supabase = await createClient()
     let query = supabase
       .from('sale_credits')
-      .select('*, sales!inner(number, branch_id, customer_name, created_at), credit_payments(count)')
+      .select('*, sales!inner(number, branch_id, created_by, customer_name, created_at), credit_payments(count)')
       .order('created_at', { ascending: false })
 
     if (branchId) query = query.eq('sales.branch_id', branchId)
+    if (sellerId) query = query.eq('sales.created_by', sellerId)
 
     const { data, error: queryErr } = await query
     if (queryErr) { throw new TypeError(queryErr.message) }
 
     const now = Date.now()
 
-    const items = (data ?? []).map(c => {
+    const saleRecords = (data ?? []) as Array<Record<string, unknown>>
+    const sellerIds = [...new Set(saleRecords.map(c => (c.sales as Record<string, unknown> | undefined)?.created_by as string).filter(Boolean))]
+    const userMap: Record<string, string> = {}
+    if (sellerIds.length > 0) {
+      const { cookies } = await import('next/headers')
+      const { createServerClient } = await import('@supabase/ssr')
+      const cookieStore = await cookies()
+      const admin = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { cookies: { getAll() { return cookieStore.getAll() }, setAll() {} } }
+      )
+      const { data: users } = await admin.auth.admin.listUsers()
+      for (const u of users?.users ?? []) {
+        userMap[u.id] = (u.user_metadata?.full_name as string) || u.email || u.phone || 'Usuario'
+      }
+    }
+
+    const items = saleRecords.map(c => {
       const sale = c.sales as Record<string, unknown> | undefined
       const createdDate = (sale?.created_at as string) ?? c.created_at
+      const createdBy = (sale?.created_by as string | null) ?? null
       return {
-        id: c.id,
-        sale_id: c.sale_id,
+        id: c.id as string,
+        sale_id: c.sale_id as string,
         sale_number: (sale?.number as number) ?? 0,
         total: Number(c.total),
         balance: Number(c.balance),
         customer_name: (sale?.customer_name as string | null) ?? null,
-        created_at: c.created_at,
-        payment_count: Array.isArray(c.credit_payments) ? c.credit_payments.length : 0,
+        created_at: c.created_at as string,
+        payment_count: Array.isArray(c.credit_payments) ? (c.credit_payments as unknown[]).length : 0,
         days: Math.floor((now - new Date(createdDate).getTime()) / (1000 * 60 * 60 * 24)),
+        created_by: createdBy,
+        created_by_name: createdBy ? (userMap[createdBy] ?? 'Usuario') : null,
       }
     })
 
     return { success: true, message: '', data: items }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function getCreditSellers(branchId?: string): Promise<ActionResponse<Array<{ id: string; name: string }>>> {
+  try {
+    const supabase = await createClient()
+    let query = supabase
+      .from('sale_credits')
+      .select('sales!inner(created_by)')
+      .not('sales.created_by', 'is', null)
+
+    if (branchId) query = query.eq('sales.branch_id', branchId)
+
+    const { data, error: queryErr } = await query
+    if (queryErr) { throw new TypeError(queryErr.message) }
+
+    const userIds = [...new Set((data ?? []).map(c => {
+      const sales = c.sales as Array<Record<string, unknown>> | Record<string, unknown> | undefined
+      return Array.isArray(sales) ? (sales[0]?.created_by as string | undefined) : (sales?.created_by as string | undefined)
+    }).filter(Boolean))] as string[]
+    const userMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { cookies } = await import('next/headers')
+      const { createServerClient } = await import('@supabase/ssr')
+      const cookieStore = await cookies()
+      const admin = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { cookies: { getAll() { return cookieStore.getAll() }, setAll() {} } }
+      )
+      const { data: users } = await admin.auth.admin.listUsers()
+      for (const u of users?.users ?? []) {
+        userMap[u.id] = (u.user_metadata?.full_name as string) || u.email || u.phone || 'Usuario'
+      }
+    }
+
+    const sellers = userIds
+      .map(id => ({ id, name: userMap[id] ?? 'Usuario' }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return { success: true, message: '', data: sellers }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -297,6 +427,7 @@ export async function getProfitReport(branchId?: string, dateFrom?: string, date
     let query = supabase
       .from('sales')
       .select('*, branches(name), sale_items(*, products(cost))')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (branchId) query = query.eq('branch_id', branchId)

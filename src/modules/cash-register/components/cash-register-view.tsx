@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getMovements, getBalance, createMovement, createCashTransfer } from '../actions'
+import { getMovements, getBalance, createMovement, createCashTransfer, getCashUsers } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -11,6 +11,7 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { cn } from '@/shared/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -50,8 +51,10 @@ export function CashRegisterView() {
   const [cashAmt, setCashAmt] = useState('')
   const [qrAmt, setQrAmt] = useState('')
   const [description, setDescription] = useState('')
+  const [handlerUserId, setHandlerUserId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [page, setPage] = useState(1)
+  const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
 
   const [showTransfer, setShowTransfer] = useState(false)
   const [transferDest, setTransferDest] = useState('')
@@ -63,11 +66,11 @@ export function CashRegisterView() {
   const [transferSubmitting, setTransferSubmitting] = useState(false)
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1) }, [branchId])
+  useEffect(() => { setPage(1) }, [branchId, filter])
 
   const { data: movementsData, isLoading } = useQuery({
-    queryKey: ['cash-movements', branchId, page],
-    queryFn: () => getMovements({ branchId: branchId || undefined, page, pageSize: PAGE_SIZE }),
+    queryKey: ['cash-movements', branchId, page, filter],
+    queryFn: () => getMovements({ branchId: branchId || undefined, page, pageSize: PAGE_SIZE, filter }),
     staleTime: 0,
     enabled: !!branchId,
   })
@@ -78,6 +81,13 @@ export function CashRegisterView() {
     staleTime: 0,
     enabled: !!branchId,
   })
+
+  const { data: usersData } = useQuery({
+    queryKey: ['cash-users'],
+    queryFn: () => getCashUsers(),
+    staleTime: 60_000,
+  })
+  const users = (usersData?.success ? usersData.data : []) as Array<{ id: string; name: string }>
 
   const { data: branchesData } = useQuery({
     queryKey: ['active-branches'],
@@ -108,6 +118,7 @@ export function CashRegisterView() {
     setCashAmt('')
     setQrAmt('')
     setDescription('')
+    setHandlerUserId('')
     setShowModal(true)
   }
 
@@ -123,6 +134,7 @@ export function CashRegisterView() {
       toast.error('Ingresa un monto válido'); return
     }
     if (!description) { toast.error('Ingresa una descripción'); return }
+    if (!handlerUserId) { toast.error('Selecciona quién cobró o retiró el monto'); return }
 
     setSubmitting(true)
     const finalAmount = method === 'mixed' ? String((parseFloat(cashAmt) || 0) + (parseFloat(qrAmt) || 0)) : amount
@@ -134,6 +146,7 @@ export function CashRegisterView() {
     formData.set('cash_amount', method === 'mixed' ? cashAmt : '0')
     formData.set('qr_amount', method === 'mixed' ? qrAmt : '0')
     formData.set('description', description)
+    formData.set('handler_user_id', handlerUserId)
     const res = await createMovement(formData)
     setSubmitting(false)
 
@@ -263,6 +276,7 @@ export function CashRegisterView() {
                     { header: 'Efectivo', dataKey: 'Efectivo' },
                     { header: 'QR', dataKey: 'QR' },
                     { header: 'Descripción', dataKey: 'Descripción' },
+                    { header: 'Cobró / Retiró', dataKey: 'Cobró / Retiró' },
                     { header: 'Registrado por', dataKey: 'Registrado por' },
                     { header: 'Fecha', dataKey: 'Fecha' },
                   ],
@@ -273,6 +287,7 @@ export function CashRegisterView() {
                     Efectivo: `Bs ${Number(m.cash_amount ?? 0).toFixed(2)}`,
                     QR: `Bs ${Number(m.qr_amount ?? 0).toFixed(2)}`,
                     Descripción: (m.description as string) ?? '—',
+                    'Cobró / Retiró': (m.handler_name as string) ?? '—',
                     'Registrado por': (m.created_by_name as string) ?? '—',
                     Fecha: new Date(m.created_at as string).toLocaleString(),
                   })),
@@ -296,52 +311,109 @@ export function CashRegisterView() {
         </Card>
       )}
 
-      {/* Movements list */}
+      {/* Filter tabs + movements list */}
       {!branchId ? (
         <div className="text-center text-muted-foreground py-12">Selecciona una sucursal en el menú lateral</div>
-      ) : isLoading ? (
-        <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">#</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Monto</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Registrado por</TableHead>
-                <TableHead>Fecha</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {movements.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No hay movimientos</TableCell>
-                </TableRow>
-              )}
-              {movements.map((m: Record<string, unknown>) => {
-                const mt = m.type as string
-                const sign = reverseTypes[mt] ?? 0
-                return (
-                  <TableRow key={m.id as string}>
-                    <TableCell className="font-mono text-xs">#{((m.number as number)?.toString().padStart(4, '0') ?? (m.id as string).slice(0, 8))}</TableCell>
-                    <TableCell>
-                      <Badge variant={sign > 0 ? 'default' : sign < 0 ? 'destructive' : 'secondary'}>
-                        {movementTypeLabels[mt] ?? mt}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={`font-mono font-medium ${sign > 0 ? 'text-green-600' : 'text-destructive'}`}>
-                      {sign > 0 ? '+' : ''}Bs {Number(m.amount).toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-48 truncate">{(m.description as string) ?? '—'}</TableCell>
-                    <TableCell className="text-muted-foreground">{(m.created_by_name as string) ?? '—'}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{new Date(m.created_at as string).toLocaleString()}</TableCell>
+        <div className="space-y-4">
+          <div className="rounded-lg border">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+              <div className="flex items-center gap-1 rounded-lg border p-0.5 bg-muted/50">
+                {([
+                  ['all', 'Todos'],
+                  ['income', 'Ingresos'],
+                  ['expense', 'Egresos'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setFilter(key)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all',
+                      filter === key
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {key === 'income' ? <ArrowUp className="h-4 w-4" /> : key === 'expense' ? <ArrowDown className="h-4 w-4" /> : null}
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {filter === 'all' && (
+                  <>
+                    <span className="font-semibold text-green-600">Ingresos Bs {(balance?.income ?? 0).toFixed(2)}</span>
+                    {' · '}
+                    <span className="font-semibold text-destructive">Egresos Bs {(balance?.expense ?? 0).toFixed(2)}</span>
+                  </>
+                )}
+                {filter === 'income' && (
+                  <>
+                    <span className="font-semibold text-green-600">Total ingresos Bs {(balance?.income ?? 0).toFixed(2)}</span>
+                    {' · '}Efectivo{' '}
+                    <span className="font-semibold text-emerald-600">Bs {(balance?.incomeCash ?? 0).toFixed(2)}</span>
+                    {' · '}QR{' '}
+                    <span className="font-semibold text-blue-600">Bs {(balance?.incomeQr ?? 0).toFixed(2)}</span>
+                  </>
+                )}
+                {filter === 'expense' && (
+                  <>
+                    <span className="font-semibold text-destructive">Total egresos Bs {(balance?.expense ?? 0).toFixed(2)}</span>
+                    {' · '}Efectivo{' '}
+                    <span className="font-semibold text-emerald-600">Bs {(balance?.expenseCash ?? 0).toFixed(2)}</span>
+                    {' · '}QR{' '}
+                    <span className="font-semibold text-blue-600">Bs {(balance?.expenseQr ?? 0).toFixed(2)}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            {isLoading ? (
+              <div className="space-y-3 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">#</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Monto</TableHead>
+                    <TableHead>Descripción</TableHead>
+                    <TableHead>Cobró / Retiró</TableHead>
+                    <TableHead>Registrado por</TableHead>
+                    <TableHead>Fecha</TableHead>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {movements.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No hay movimientos</TableCell>
+                    </TableRow>
+                  )}
+                  {movements.map((m: Record<string, unknown>) => {
+                    const mt = m.type as string
+                    const sign = reverseTypes[mt] ?? 0
+                    return (
+                      <TableRow key={m.id as string}>
+                        <TableCell className="font-mono text-xs">#{((m.number as number)?.toString().padStart(4, '0') ?? (m.id as string).slice(0, 8))}</TableCell>
+                        <TableCell>
+                          <Badge variant={sign > 0 ? 'default' : sign < 0 ? 'destructive' : 'secondary'}>
+                            {movementTypeLabels[mt] ?? mt}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={`font-mono font-medium ${sign > 0 ? 'text-green-600' : 'text-destructive'}`}>
+                          {sign > 0 ? '+' : ''}Bs {Number(m.amount).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground max-w-48 truncate">{(m.description as string) ?? '—'}</TableCell>
+                        <TableCell className="font-medium">{(m.handler_name as string) ?? '—'}</TableCell>
+                        <TableCell className="text-muted-foreground">{(m.created_by_name as string) ?? '—'}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{new Date(m.created_at as string).toLocaleString()}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </div>
       )}
 
@@ -394,6 +466,7 @@ export function CashRegisterView() {
               <th>Efectivo</th>
               <th>QR</th>
               <th>Descripción</th>
+              <th>Cobró / Retiró</th>
               <th>Registrado por</th>
               <th>Fecha</th>
             </tr>
@@ -407,6 +480,7 @@ export function CashRegisterView() {
                 <td>Bs {Number(m.cash_amount ?? 0).toFixed(2)}</td>
                 <td>Bs {Number(m.qr_amount ?? 0).toFixed(2)}</td>
                 <td>{(m.description as string) ?? '—'}</td>
+                <td>{(m.handler_name as string) ?? '—'}</td>
                 <td>{(m.created_by_name as string) ?? '—'}</td>
                 <td>{new Date(m.created_at as string).toLocaleString()}</td>
               </tr>
@@ -460,6 +534,23 @@ export function CashRegisterView() {
             <div className="space-y-1">
               <label className="text-sm font-medium">Descripción</label>
               <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Motivo del movimiento" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">
+                {modalType === 'manual_income' ? '¿Quién cobró el monto?' : '¿Quién retiró el monto?'}
+              </label>
+              <Select value={handlerUserId} onValueChange={(v) => setHandlerUserId(v ?? '')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Seleccionar usuario">
+                    {handlerUserId ? users.find(u => u.id === handlerUserId)?.name ?? '' : ''}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button onClick={handleSubmit} disabled={submitting} className="w-full">
               {submitting ? 'Guardando...' : 'Registrar'}

@@ -71,8 +71,14 @@ export function PurchaseDetail({ purchaseId, canManage = false, isAdmin = false 
     quantity: number
     unit_cost: number
     subtotal: number
-    products: { name: string; image_url: string | null } | null
+    products: { name: string; image_url: string | null; units_of_measure: { name: string; abbreviation: string | null } | null } | null
   }>
+
+  const getUnitLabel = (product: (typeof items)[number]['products']): string | null => {
+    const u = product?.units_of_measure
+    if (!u) return null
+    return u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name
+  }
 
   const purchaseData = purchase as Record<string, unknown>
   const expenses = (purchaseData.expenses ?? []) as Array<{ id: string; description: string; cost: number }>
@@ -168,8 +174,13 @@ export function PurchaseDetail({ purchaseId, canManage = false, isAdmin = false 
                     responsible: purchase.created_by_name ?? '—',
                     total: Number(purchase.total),
                     notes: purchase.notes as string | null,
-                    items: (purchase.items ?? []).map((i: { products: { name: string } | null; quantity: number; unit_cost: number; subtotal: number }) => ({
-                      product_name: i.products?.name ?? '—',
+                    items: (purchase.items ?? []).map((i: { products: { name: string; units_of_measure: { name: string; abbreviation: string | null } | null } | null; quantity: number; unit_cost: number; subtotal: number }) => ({
+                      product_name: (() => {
+                        const p = i.products
+                        const u = p?.units_of_measure
+                        const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
+                        return p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—'
+                      })(),
                       quantity: i.quantity,
                       unit_cost: Number(i.unit_cost),
                       subtotal: Number(i.subtotal),
@@ -246,8 +257,13 @@ export function PurchaseDetail({ purchaseId, canManage = false, isAdmin = false 
                         <div className="h-8 w-8 rounded bg-muted flex items-center justify-center"><Package className="h-4 w-4" /></div>
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">{item.products?.name ?? '—'}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell className="font-medium">
+                      {item.products?.name ?? '—'}
+                      {getUnitLabel(item.products) && (
+                        <span className="ml-2 text-xs text-muted-foreground font-normal">({getUnitLabel(item.products)})</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{item.quantity}{getUnitLabel(item.products) ? ` ${getUnitLabel(item.products)}` : ''}</TableCell>
                     {showCost && <TableCell>Bs {Number(item.unit_cost).toFixed(2)}</TableCell>}
                     {showCost && <TableCell>Bs {Number(item.subtotal).toFixed(2)}</TableCell>}
                   </TableRow>

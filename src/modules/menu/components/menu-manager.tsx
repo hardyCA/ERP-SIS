@@ -21,7 +21,7 @@ import {
   FileText, Printer, Download, Upload, RefreshCw,
   MoreHorizontal, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Circle, Home, Info, AlertTriangle, Shield,
-  Minus, X, Check, Search, Menu,
+  Minus, X, Check, Search, Menu, Ruler,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
@@ -33,7 +33,7 @@ const iconMap: Record<string, LucideIcon> = {
   Store, Truck, Package, Folder, Settings, User,
   Building2, Sparkles, Activity, TrendingUp, DollarSign,
   FileText, Printer, Download, Upload, RefreshCw,
-  Plus, Minus, X, Check, Search, Menu,
+  Plus, Minus, X, Check, Search, Menu, Ruler,
   MoreHorizontal, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Circle, Home, Info, AlertTriangle, Shield,
 }
@@ -71,6 +71,7 @@ const iconLabels: Record<string, string> = {
   Check: 'Verificar',
   Search: 'Buscar',
   Menu: 'Menú',
+  Ruler: 'Regla',
   MoreHorizontal: 'Más',
   ChevronDown: 'Abajo',
   ChevronUp: 'Arriba',
@@ -89,7 +90,7 @@ const iconOptions = [
   'Store', 'Truck', 'Package', 'Folder', 'Settings', 'User',
   'Building2', 'Sparkles', 'Activity', 'TrendingUp', 'DollarSign',
   'FileText', 'Printer', 'Download', 'Upload', 'RefreshCw',
-  'Plus', 'Minus', 'X', 'Check', 'Search', 'Menu',
+  'Plus', 'Minus', 'X', 'Check', 'Search', 'Menu', 'Ruler',
   'MoreHorizontal', 'ChevronDown', 'ChevronUp', 'ChevronLeft', 'ChevronRight',
   'Circle', 'Home', 'Info', 'AlertTriangle', 'Shield',
 ]

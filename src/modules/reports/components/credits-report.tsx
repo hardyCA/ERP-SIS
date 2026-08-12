@@ -1,13 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getCreditReport } from '../actions'
+import { getCreditReport, getCreditSellers } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
-import { Timer, FileSpreadsheet, FileText, Printer } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
+import { Timer, FileSpreadsheet, FileText, Printer, UserCircle } from 'lucide-react'
 import { exportToExcel, exportToPdf, printElement } from '@/shared/lib/export'
 import {
   Table,
@@ -27,12 +35,21 @@ function daysBadge(days: number) {
 
 export function CreditsReport() {
   const { branchId } = useBranch()
+  const [sellerId, setSellerId] = useState('all')
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['credit-report', branchId],
-    queryFn: () => getCreditReport(branchId || undefined),
+    queryKey: ['credit-report', branchId, sellerId],
+    queryFn: () => getCreditReport(branchId || undefined, sellerId === 'all' ? undefined : sellerId),
     staleTime: 0,
   })
+
+  const { data: sellersResult } = useQuery({
+    queryKey: ['credit-sellers', branchId],
+    queryFn: () => getCreditSellers(branchId || undefined),
+    staleTime: 60_000,
+  })
+
+  const sellers = (sellersResult?.success ? sellersResult.data : []) ?? []
 
   const credits = (result?.success ? result.data : []) ?? []
 
@@ -42,6 +59,7 @@ export function CreditsReport() {
 
   const pendingRows = activeCredits.map((c) => ({
     '#': c.sale_number.toString().padStart(4, '0'),
+    Vendedor: c.created_by_name ?? '—',
     Cliente: c.customer_name ?? '—',
     Total: `Bs ${c.total.toFixed(2)}`,
     Saldo: `Bs ${c.balance.toFixed(2)}`,
@@ -56,6 +74,7 @@ export function CreditsReport() {
       'Reporte de créditos pendientes de cobro',
       [
         { header: 'Venta #', dataKey: '#' },
+        { header: 'Vendedor', dataKey: 'Vendedor' },
         { header: 'Cliente', dataKey: 'Cliente' },
         { header: 'Total', dataKey: 'Total' },
         { header: 'Saldo', dataKey: 'Saldo' },
@@ -89,31 +108,53 @@ export function CreditsReport() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" className="h-7 text-[11px]"
-          onClick={() => {
-            const data = credits.map((c) => ({
-              '#': c.sale_number.toString().padStart(4, '0'),
-              Cliente: c.customer_name ?? '—',
-              Total: c.total.toFixed(2),
-              Saldo: c.balance.toFixed(2),
-              Pagos: c.payment_count,
-              Estado: c.balance === 0 ? 'Pagado' : 'Pendiente',
-              Días: c.days,
-              Fecha: new Date(c.created_at).toLocaleDateString(),
-            }))
-            exportToExcel(data, 'creditos', 'Créditos')
-          }}>
-          <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
-        </Button>
-        <Button variant="outline" size="sm" className="h-7 text-[11px]"
-          onClick={exportPendingPdf}>
-          <FileText className="h-3 w-3 mr-1" /> PDF
-        </Button>
-        <Button variant="outline" size="sm" className="h-7 text-[11px]"
-          onClick={() => printElement('credits-pending-print')}>
-          <Printer className="h-3 w-3 mr-1" /> Imprimir
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Vendedor</label>
+          <Select value={sellerId} onValueChange={(v) => setSellerId(v ?? 'all')}>
+            <SelectTrigger size="sm" className="h-8 min-w-44">
+              <UserCircle className="h-4 w-4" />
+              <SelectValue>
+                {sellerId === 'all'
+                  ? 'Todos'
+                  : sellers.find(s => s.id === sellerId)?.name ?? 'Seleccionar'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {sellers.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-7 text-[11px]"
+            onClick={() => {
+              const data = credits.map((c) => ({
+                '#': c.sale_number.toString().padStart(4, '0'),
+                Vendedor: c.created_by_name ?? '—',
+                Cliente: c.customer_name ?? '—',
+                Total: c.total.toFixed(2),
+                Saldo: c.balance.toFixed(2),
+                Pagos: c.payment_count,
+                Estado: c.balance === 0 ? 'Pagado' : 'Pendiente',
+                Días: c.days,
+                Fecha: new Date(c.created_at).toLocaleDateString(),
+              }))
+              exportToExcel(data, 'creditos', 'Créditos')
+            }}>
+            <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[11px]"
+            onClick={exportPendingPdf}>
+            <FileText className="h-3 w-3 mr-1" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[11px]"
+            onClick={() => printElement('credits-pending-print')}>
+            <Printer className="h-3 w-3 mr-1" /> Imprimir
+          </Button>
+        </div>
       </div>
 
       <div id="credits-pending-print" className="hidden">
@@ -127,6 +168,7 @@ export function CreditsReport() {
           <thead>
             <tr>
               <th>Venta #</th>
+              <th>Vendedor</th>
               <th>Cliente</th>
               <th>Total</th>
               <th>Saldo</th>
@@ -139,6 +181,7 @@ export function CreditsReport() {
             {activeCredits.map((c) => (
               <tr key={c.id}>
                 <td>#{c.sale_number.toString().padStart(4, '0')}</td>
+                <td>{c.created_by_name ?? '—'}</td>
                 <td>{c.customer_name ?? '—'}</td>
                 <td>Bs {c.total.toFixed(2)}</td>
                 <td>Bs {c.balance.toFixed(2)}</td>
@@ -161,6 +204,7 @@ export function CreditsReport() {
             <TableHeader>
               <TableRow>
                 <TableHead>Venta #</TableHead>
+                <TableHead>Vendedor</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Saldo</TableHead>
@@ -173,12 +217,13 @@ export function CreditsReport() {
             <TableBody>
               {credits.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Sin resultados</TableCell>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">Sin resultados</TableCell>
                 </TableRow>
               )}
               {credits.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-mono">#{c.sale_number.toString().padStart(4, '0')}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{c.created_by_name ?? '—'}</TableCell>
                   <TableCell>{c.customer_name ?? '—'}</TableCell>
                   <TableCell>Bs {c.total.toFixed(2)}</TableCell>
                   <TableCell className="font-mono">Bs {c.balance.toFixed(2)}</TableCell>

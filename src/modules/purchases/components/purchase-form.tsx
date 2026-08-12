@@ -25,15 +25,9 @@ interface LineItem {
   product_id: string
   product_name: string
   image_url: string | null
+  unit: string | null
   quantity: number
   unit_cost: number
-}
-
-interface ProductToAdd {
-  id: string
-  name: string
-  image_url: string | null
-  cost: number
 }
 
 export function PurchaseForm({ purchaseId }: { purchaseId?: string }) {
@@ -85,7 +79,7 @@ export function PurchaseForm({ purchaseId }: { purchaseId?: string }) {
     product_id: string
     quantity: number
     unit_cost: number
-    products: { name: string | null; image_url: string | null } | null
+    products: { name: string | null; image_url: string | null; units_of_measure: { name: string; abbreviation: string | null } | null } | null
   }>
   const loadedExpenses = (purchase?.expenses ?? []) as Array<{ description: string; cost: number }>
 
@@ -97,13 +91,18 @@ export function PurchaseForm({ purchaseId }: { purchaseId?: string }) {
       initialBranchId={purchase?.branch_id}
       initialSupplier={purchase?.suppliers ? { id: purchase.suppliers.id, name: purchase.suppliers.name } : null}
       initialNotes={purchase?.notes ?? ''}
-      initialItems={loadedItems.map(it => ({
-        product_id: it.product_id,
-        product_name: it.products?.name ?? 'Producto',
-        image_url: it.products?.image_url ?? null,
-        quantity: it.quantity,
-        unit_cost: Number(it.unit_cost) || 0,
-      }))}
+      initialItems={loadedItems.map(it => {
+        const u = it.products?.units_of_measure
+        const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
+        return {
+          product_id: it.product_id,
+          product_name: it.products?.name ?? 'Producto',
+          image_url: it.products?.image_url ?? null,
+          unit: unitLabel,
+          quantity: it.quantity,
+          unit_cost: Number(it.unit_cost) || 0,
+        }
+      })}
       initialExpenses={loadedExpenses.map(e => ({
         description: e.description,
         cost: String(e.cost ?? 0),
@@ -168,11 +167,26 @@ function PurchaseFormInner({
 
   const brands = (brandsData?.success ? (brandsData.data ?? []) : []) as Array<{ id: string; name: string }>
   const categories = (categoriesData?.success ? (categoriesData.data ?? []) : []) as Array<{ id: string; name: string }>
-  const allProducts = (productsData?.success ? (productsData.data ?? []) : []) as Array<{ id: string; name: string; cost: number; image_url: string | null; is_active: boolean }>
+  const allProducts = (productsData?.success ? (productsData.data ?? []) : []) as Array<{
+    id: string
+    name: string
+    cost: number
+    image_url: string | null
+    is_active: boolean
+    units_of_measure: { name: string; abbreviation: string | null } | null
+  }>
 
-  const products = allProducts.filter(p => p.is_active && !items.some(i => i.product_id === p.id))
+  const getUnitLabel = (product: (typeof allProducts)[number]): string | null => {
+    const u = product.units_of_measure
+    if (!u) return null
+    return u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name
+  }
 
-  const addItem = useCallback((product: ProductToAdd, qtyStr: string, costStr: string) => {
+  const products = allProducts
+    .filter(p => p.is_active && !items.some(i => i.product_id === p.id))
+    .map(p => ({ id: p.id, name: p.name, image_url: p.image_url, cost: p.cost, unit: getUnitLabel(p) }))
+
+  const addItem = useCallback((product: (typeof products)[number], qtyStr: string, costStr: string) => {
     const qty = parseInt(qtyStr) || 0
     const cost = parseFloat(costStr) || 0
     if (qty < 1) { toast.error('La cantidad debe ser mayor a 0'); return }
@@ -181,6 +195,7 @@ function PurchaseFormInner({
       product_id: product.id,
       product_name: product.name,
       image_url: product.image_url,
+      unit: product.unit ?? null,
       quantity: qty,
       unit_cost: cost,
     }])
@@ -363,6 +378,7 @@ function PurchaseFormInner({
                             )}
                           </div>
                           <p className="text-xs font-semibold sm:font-medium text-foreground leading-snug break-words sm:truncate flex-1 min-w-0">{product.name}</p>
+                          {product.unit && <span className="text-[10px] text-muted-foreground font-normal">{product.unit}</span>}
                         </div>
 
                         {/* Controls (Costo + Cant + Agregar) */}
@@ -445,6 +461,7 @@ function PurchaseFormInner({
                     )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{item.product_name}</p>
+                      {item.unit && <p className="text-xs text-muted-foreground truncate">{item.unit}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

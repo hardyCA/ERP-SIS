@@ -11,7 +11,7 @@ export async function getInventory(branchId: string, brandId?: string, categoryI
     const supabase = await createClient()
     let query = supabase
       .from('inventory_items')
-      .select('*, products!inner(name, cost, image_url, is_active, brand_id, category_id, brands(name), categories(name))')
+      .select('*, products!inner(name, cost, image_url, is_active, brand_id, category_id, brands(name), categories(name), units_of_measure(name, abbreviation))')
       .eq('branch_id', branchId)
       .gt('quantity', 0)
       .eq('products.is_active', true)

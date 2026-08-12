@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import type { CellInput } from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 
 type PdfColumn = { header: string; dataKey: string }
@@ -75,6 +76,12 @@ export function printElement(elementId: string) {
       .summary { margin: 16px 0; font-size: 12px; }
       .summary-row { display: flex; justify-content: space-between; padding: 4px 0; }
       .total-row { font-weight: bold; font-size: 14px; border-top: 2px solid #000; padding-top: 8px; margin-top: 8px; }
+      .group-brand { background: #2563eb; color: white; font-weight: bold; }
+      .group-category { background: #e5edfb; font-weight: bold; }
+      .signature { display: flex; justify-content: space-between; margin-top: 48px; }
+      .signature-box { width: 45%; text-align: center; padding-top: 8px; }
+      .signature-line { border-top: 1px solid #000; padding-top: 6px; }
+      .footer-info { margin-top: 32px; text-align: center; font-size: 12px; color: #444; }
       @media print { .no-print { display: none; } }
     </style></head><body>
     ${el.innerHTML}
@@ -85,6 +92,228 @@ export function printElement(elementId: string) {
     <script>window.print()</script>
     </body></html>`)
   printWin.document.close()
+}
+
+export interface InventoryPdfItem {
+  name: string
+  quantity: number
+  cost: number
+  sale_price: number
+}
+
+export interface InventoryPdfCategory {
+  name: string
+  items: InventoryPdfItem[]
+}
+
+export interface InventoryPdfBrand {
+  brand: string
+  categories: InventoryPdfCategory[]
+}
+
+export interface InventorySignature {
+  label: string
+  name?: string
+}
+
+export function exportInventoryPdf(opts: {
+  title: string
+  subtitle: string
+  brands: InventoryPdfBrand[]
+  showCost?: boolean
+  generatedBy: string
+  generatedAt: string
+  branchName?: string
+  signatures: InventorySignature[]
+  filename: string
+}) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const ml = 14
+  const mr = 14
+  const rightX = pageW - mr
+
+  doc.setFont('helvetica', 'normal')
+
+  function setBold() { doc.setFont('helvetica', 'bold') }
+  function setNormal() { doc.setFont('helvetica', 'normal') }
+
+  // === HEADER ===
+  const logoY = 14
+  doc.setFontSize(18)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('SIIM', ml, logoY)
+  setNormal()
+  doc.setFontSize(6.5)
+  doc.setTextColor(120)
+  doc.text('Sistema Integral de Inventarios', ml, logoY + 3.5)
+
+  doc.setFontSize(14)
+  setBold()
+  doc.setTextColor(0)
+  doc.text(opts.title, pageW / 2, logoY + 8, { align: 'center' })
+  setNormal()
+  doc.setFontSize(8.5)
+  doc.setTextColor(80)
+  doc.text(opts.subtitle, pageW / 2, logoY + 12.5, { align: 'center' })
+  doc.text(`Sucursal: ${opts.branchName ?? 'Todas'}`, pageW / 2, logoY + 16, { align: 'center' })
+
+  const blockW = 52
+  const blockX = rightX - blockW
+  doc.setFontSize(6)
+  doc.setTextColor(120)
+  doc.text('REPORTE', blockX + blockW / 2, logoY + 0.5, { align: 'center' })
+  doc.setFontSize(8)
+  setBold()
+  doc.setTextColor(0)
+  doc.text(opts.generatedAt, blockX + blockW / 2, logoY + 5, { align: 'center' })
+
+  // === TABLE ===
+  const hasCost = opts.showCost ?? false
+  const columns = hasCost
+    ? ['Producto', 'Stock', 'Costo', 'Precio Venta', 'Valor Total']
+    : ['Producto', 'Stock', 'Precio Venta']
+  const colCount = columns.length
+
+  const body: CellInput[][] = []
+  let brandCount = 0
+  let categoryCount = 0
+  let totalItems = 0
+  let totalValue = 0
+  let totalPotential = 0
+
+  opts.brands.forEach((b) => {
+    brandCount += 1
+    b.categories.forEach((c) => {
+      categoryCount += 1
+      c.items.forEach((i) => {
+        totalItems += i.quantity
+        totalValue += i.cost * i.quantity
+        totalPotential += i.sale_price * i.quantity
+      })
+    })
+  })
+
+  opts.brands.forEach((b) => {
+    body.push([
+      { content: b.brand, colSpan: colCount, styles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8.5 } },
+    ])
+    let brandValue = 0
+    b.categories.forEach((c) => {
+      const catValue = c.items.reduce((s, i) => s + i.cost * i.quantity, 0)
+      brandValue += catValue
+      body.push([
+        { content: c.name, colSpan: colCount, styles: { fillColor: [190, 210, 245], textColor: 30, fontStyle: 'bold', fontSize: 8 } },
+      ])
+      c.items.forEach((i) => {
+        const row: CellInput[] = [i.name, i.quantity]
+        if (hasCost) row.push(Number(i.cost.toFixed(2)))
+        row.push(Number(i.sale_price.toFixed(2)))
+        if (hasCost) row.push(Number((i.cost * i.quantity).toFixed(2)))
+        body.push(row)
+      })
+      body.push([
+        { content: `Subtotal ${c.name}`, colSpan: colCount - 1, styles: { halign: 'right', fontStyle: 'italic', fontSize: 8 } },
+        hasCost ? Number(catValue.toFixed(2)) : '',
+      ])
+    })
+    body.push([
+      { content: `Total ${b.brand}`, colSpan: colCount - 1, styles: { halign: 'right', fontStyle: 'bold', fontSize: 8.5 } },
+      hasCost ? Number(brandValue.toFixed(2)) : '',
+    ])
+  })
+
+  const finalFoot: CellInput[] = [
+    'TOTAL GENERAL',
+    totalItems,
+    ...(hasCost ? [Number(totalValue.toFixed(2))] : []),
+    Number(totalPotential.toFixed(2)),
+    ...(hasCost ? [Number(totalValue.toFixed(2))] : []),
+  ]
+
+  autoTable(doc, {
+    startY: logoY + 19,
+    head: [columns],
+    body: body,
+    foot: columns.length === finalFoot.length ? [finalFoot] : [],
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    footStyles: { fillColor: [210, 223, 245], textColor: [20, 30, 60], fontStyle: 'bold', fontSize: 8.5 },
+    columnStyles: {
+      1: { halign: 'center' },
+      2: { halign: 'right' },
+      3: hasCost ? { halign: 'right' } : {},
+      4: hasCost ? { halign: 'right' } : {},
+    },
+  })
+
+  const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6
+
+  // === SUMMARY ===
+  let y = afterTable + 2
+  const summary: { label: string; value: string }[] = [
+    { label: 'Marcas', value: String(brandCount) },
+    { label: 'Categorías', value: String(categoryCount) },
+    { label: 'Unidades', value: String(totalItems) },
+    ...(hasCost ? [{ label: 'Valor inventario (costo)', value: `Bs ${totalValue.toFixed(2)}` }] : []),
+    { label: 'Valor venta potencial', value: `Bs ${totalPotential.toFixed(2)}` },
+  ]
+
+  doc.setFontSize(8)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('RESUMEN', ml, y)
+  y += 5
+  setNormal()
+  summary.forEach((s) => {
+    doc.setFontSize(8)
+    doc.setTextColor(80)
+    doc.text(`${s.label}:`, ml + 2, y)
+    doc.setTextColor(0)
+    doc.text(s.value, ml + 60, y)
+    y += 4.5
+  })
+
+  // === GENERADO POR ===
+  y += 2
+  doc.setDrawColor(120)
+  doc.setLineWidth(0.3)
+  doc.line(ml, y, rightX, y)
+  y += 5
+  doc.setFontSize(8)
+  doc.text(`Reporte generado por: ${opts.generatedBy}`, ml, y)
+  y += 4
+
+  // === FIRMAS ===
+  let sigArea = y + 40
+  if (sigArea > pageH - 25) {
+    doc.addPage()
+    y = 40
+    sigArea = y + 40
+  }
+  const sigGap = (pageW - ml - mr) / opts.signatures.length
+  opts.signatures.forEach((s, idx) => {
+    const xCenter = ml + sigGap * idx + sigGap / 2
+    const lineStart = xCenter - 25
+    const lineEnd = xCenter + 25
+    doc.setLineWidth(0.4)
+    doc.line(lineStart, sigArea - 10, lineEnd, sigArea - 10)
+    doc.setFontSize(8.5)
+    setBold()
+    doc.setTextColor(0)
+    doc.text(s.label, xCenter, sigArea, { align: 'center' })
+    setNormal()
+    if (s.name) {
+      doc.setFontSize(8)
+      doc.setTextColor(80)
+      doc.text(s.name, xCenter, sigArea + 4.5, { align: 'center' })
+    }
+  })
+
+  doc.save(`${opts.filename}.pdf`)
 }
 
 function numeroALetras(n: number): string {

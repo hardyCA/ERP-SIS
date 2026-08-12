@@ -117,7 +117,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['sale', saleId],
-    queryFn: () => getSaleById(saleId),
+    queryFn: () => getSaleById(saleId, true),
     staleTime: 0,
   })
 
@@ -175,8 +175,14 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
 
   const items = (sale.items ?? []) as Array<{
     id: string; product_id: string; quantity: number; price: number; subtotal: number
-    products: { name: string; image_url: string | null } | null
+    products: { name: string; image_url: string | null; units_of_measure: { name: string; abbreviation: string | null } | null } | null
   }>
+
+  const getUnitLabel = (product: (typeof items)[number]['products']): string | null => {
+    const u = product?.units_of_measure
+    if (!u) return null
+    return u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name
+  }
 
   const credits = (sale.sale_credits as Array<Record<string, unknown>>) || []
   const activeCredit = credits.find((c: Record<string, unknown>) => (c.balance as number) > 0)
@@ -186,6 +192,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
   const pt = (sale.payment_type as string) || ''
   const saleNumber = ((sale.number as number)?.toString().padStart(4, '0')) ?? (sale.id as string).slice(0, 8)
   const PaymentIcon = paymentIcons[pt] ?? WalletMinimal
+  const isDeleted = !!sale.deleted_at
 
   return (
     <div id="sale-detail" className="space-y-6">
@@ -193,6 +200,18 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
       <Link href="/sales" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-3.5 w-3.5" /> Volver a ventas
       </Link>
+
+      {isDeleted && (
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <Trash2 className="h-4 w-4 text-destructive shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-destructive">Venta anulada</p>
+            <p className="text-xs text-destructive/80">
+              Esta venta fue anulada el {new Date(sale.deleted_at as string).toLocaleString()}. El stock se devolvió, la caja se revirtió y el crédito se canceló.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* === TOP HEADER === */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -248,12 +267,17 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                 qrAmount: Number(sale.qr_amount || 0),
                 creditAnticipo: Number(sale.credit_anticipo || 0),
                 notes: sale.notes as string | null,
-                items: (sale.items ?? []).map((i: { products: { name: string } | null; quantity: number; price: number; subtotal: number }) => ({
-                  product_name: i.products?.name ?? '—',
-                  quantity: i.quantity,
-                  price: Number(i.price),
-                  subtotal: Number(i.subtotal),
-                })),
+                items: (sale.items ?? []).map((i: { products: { name: string; units_of_measure: { name: string; abbreviation: string | null } | null } | null; quantity: number; price: number; subtotal: number }) => {
+                  const p = i.products
+                  const u = p?.units_of_measure
+                  const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
+                  return {
+                    product_name: p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—',
+                    quantity: i.quantity,
+                    price: Number(i.price),
+                    subtotal: Number(i.subtotal),
+                  }
+                }),
                 creditPayments: allPayments,
                 creditBalance: currentBalance,
                 creditTotalPaid: totalPaid,
@@ -303,12 +327,17 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                 qrAmount: Number(sale.qr_amount || 0),
                 creditAnticipo: Number(sale.credit_anticipo || 0),
                 notes: sale.notes as string | null,
-                items: (sale.items ?? []).map((i: { products: { name: string } | null; quantity: number; price: number; subtotal: number }) => ({
-                  product_name: i.products?.name ?? '—',
-                  quantity: i.quantity,
-                  price: Number(i.price),
-                  subtotal: Number(i.subtotal),
-                })),
+                items: (sale.items ?? []).map((i: { products: { name: string; units_of_measure: { name: string; abbreviation: string | null } | null } | null; quantity: number; price: number; subtotal: number }) => {
+                  const p = i.products
+                  const u = p?.units_of_measure
+                  const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
+                  return {
+                    product_name: p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—',
+                    quantity: i.quantity,
+                    price: Number(i.price),
+                    subtotal: Number(i.subtotal),
+                  }
+                }),
                 creditPayments: allPayments,
                 creditBalance: currentBalance,
                 creditTotalPaid: totalPaid,
@@ -316,7 +345,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
             }}>
             <FileDown className="h-3.5 w-3.5 mr-1.5" /> PDF
           </Button>
-          {isAdmin && (
+          {isAdmin && !isDeleted && (
             <Button
               variant="outline"
               size="sm"
@@ -325,6 +354,11 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
             >
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Eliminar
             </Button>
+          )}
+          {isDeleted && (
+            <Badge variant="destructive" className="h-7 px-3 text-xs">
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Anulada
+            </Badge>
           )}
           <Badge variant={pt === 'cash' ? 'default' : pt === 'qr' ? 'info' : pt === 'mixed' ? 'warning' : 'pending'} className="h-7 px-3 text-xs gap-1.5">
             <PaymentIcon className="h-3.5 w-3.5" />
@@ -392,7 +426,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                     )}
                   </TableCell>
                   <TableCell className="text-sm font-medium">{item.products?.name ?? '—'}</TableCell>
-                  <TableCell className="text-sm text-center tabular-nums">{item.quantity}</TableCell>
+                  <TableCell className="text-sm text-center tabular-nums">{item.quantity}{getUnitLabel(item.products) ? ` ${getUnitLabel(item.products)}` : ''}</TableCell>
                   <TableCell className="text-sm text-right tabular-nums">Bs {Number(item.price).toFixed(2)}</TableCell>
                   <TableCell className="text-sm text-right font-medium tabular-nums">Bs {Number(item.subtotal).toFixed(2)}</TableCell>
                 </TableRow>

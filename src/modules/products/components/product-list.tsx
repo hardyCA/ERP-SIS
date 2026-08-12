@@ -65,14 +65,24 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
     queryClient.invalidateQueries({ queryKey: ['products', brandId, categoryId] })
   }
 
-  const products = (result?.success ? (result.data ?? []) : []) as Array<{
-    id: string
-    name: string
-    cost: number
-    image_url: string | null
-    is_active: boolean
-    inventory_items: Array<{ branch_id: string; sale_price: number }>
-  }>
+  const products = useMemo(
+    () => (result?.success ? (result.data ?? []) : []) as Array<{
+      id: string
+      name: string
+      cost: number
+      image_url: string | null
+      is_active: boolean
+      units_of_measure: { name: string; abbreviation: string | null } | null
+      inventory_items: Array<{ branch_id: string; sale_price: number }>
+    }>,
+    [result]
+  )
+
+  const getUnitLabel = (product: (typeof products)[number]): string | null => {
+    if (!product.units_of_measure) return null
+    const u = product.units_of_measure
+    return u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name
+  }
 
   const getBranchPrice = (product: (typeof products)[number]): number | null => {
     if (!branchId) return null
@@ -120,6 +130,7 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
             <TableRow className="bg-muted/40">
               <TableHead className="w-14" />
               <TableHead>Producto</TableHead>
+              <TableHead className="w-24">Unidad</TableHead>
               {showCost && <TableHead className="w-28">Costo Base</TableHead>}
               <TableHead className="w-28">Precio</TableHead>
               <TableHead className="w-24">Estado</TableHead>
@@ -129,7 +140,7 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
           <TableBody>
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={showCost ? 6 : 5} className="text-center text-muted-foreground py-10">
+                <TableCell colSpan={showCost ? 7 : 6} className="text-center text-muted-foreground py-10">
                   {searchQuery ? `No se encontraron productos para "${searchQuery}"` : 'No hay productos en esta categoría. Crea el primero.'}
                 </TableCell>
               </TableRow>
@@ -152,6 +163,7 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
                   )}
                 </TableCell>
                 <TableCell className="font-semibold text-sm text-foreground">{product.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{getUnitLabel(product) ?? '—'}</TableCell>
                 {showCost && <TableCell className="font-mono text-sm">Bs {Number(product.cost).toFixed(2)}</TableCell>}
                 <TableCell className="font-mono text-sm">
                   {getBranchPrice(product) !== null ? `Bs ${getBranchPrice(product)!.toFixed(2)}` : <span className="text-muted-foreground">—</span>}
@@ -216,6 +228,11 @@ export function ProductList({ brandId, categoryId, onEdit }: ProductListProps) {
                   <Badge variant={product.is_active ? 'default' : 'secondary'} className="text-[10px] px-2">
                     {product.is_active ? 'Activo' : 'Inactivo'}
                   </Badge>
+                  {getUnitLabel(product) && (
+                    <span className="text-xs text-muted-foreground">
+                      {getUnitLabel(product)}
+                    </span>
+                  )}
                   {getBranchPrice(product) !== null && (
                     <span className="text-xs font-mono font-semibold text-primary">
                       Bs {getBranchPrice(product)!.toFixed(2)}
