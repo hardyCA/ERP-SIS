@@ -6,22 +6,25 @@ import { customerSchema } from './types'
 import type { ActionResponse } from './types'
 import type { Customers } from '@/shared/types/database.types'
 
-export async function getCustomers(page = 1, pageSize = 20): Promise<ActionResponse<{ items: Customers[]; total: number }>> {
+export async function getCustomers(page = 1, pageSize = 20, search = ''): Promise<ActionResponse<{ items: Customers[]; total: number }>> {
   try {
     const supabase = await createClient()
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
+    const term = search.trim()
 
-    const { count, error: countError } = await supabase
-      .from('customers')
-      .select('*', { count: 'exact', head: true })
+    let countQuery = supabase.from('customers').select('*', { count: 'exact', head: true })
+    let dataQuery = supabase.from('customers').select('*')
+    if (term) {
+      const filter = `name.ilike.%${term}%,phone.ilike.%${term}%,document_id.ilike.%${term}%,address.ilike.%${term}%`
+      countQuery = countQuery.or(filter)
+      dataQuery = dataQuery.or(filter)
+    }
+
+    const { count, error: countError } = await countQuery
     if (countError) throw new Error(countError.message)
 
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('name')
-      .range(from, to)
+    const { data, error } = await dataQuery.order('name').range(from, to)
     if (error) throw new Error(error.message)
 
     return { success: true, message: '', data: { items: data ?? [], total: count ?? 0 } }

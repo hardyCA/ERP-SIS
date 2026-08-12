@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getCustomers, deleteCustomer } from '../actions'
@@ -25,11 +25,20 @@ export function CustomerList({ onEdit }: CustomerListProps) {
   const queryClient = useQueryClient()
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
   const { data: result, isLoading } = useQuery({
-    queryKey: ['customers', page],
-    queryFn: () => getCustomers(page, PAGE_SIZE),
+    queryKey: ['customers', page, debouncedSearch],
+    queryFn: () => getCustomers(page, PAGE_SIZE, debouncedSearch),
     staleTime: 0,
   })
 
@@ -47,17 +56,6 @@ export function CustomerList({ onEdit }: CustomerListProps) {
   const items = (result?.success ? result.data?.items ?? [] : []) as Customers[]
   const total = result?.success ? result.data?.total ?? 0 : 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-
-  const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return items
-    const q = searchQuery.toLowerCase()
-    return items.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      (c.phone && c.phone.toLowerCase().includes(q)) ||
-      (c.document_id && c.document_id.toLowerCase().includes(q)) ||
-      (c.address && c.address.toLowerCase().includes(q))
-    )
-  }, [items, searchQuery])
 
   if (isLoading) {
     return (
@@ -83,7 +81,7 @@ export function CustomerList({ onEdit }: CustomerListProps) {
         </div>
       )}
 
-      {filtered.length === 0 && (
+      {items.length === 0 && (
         <div className="text-center text-muted-foreground py-12 border border-dashed rounded-2xl bg-muted/20">
           <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
           <p className="text-sm font-medium">
@@ -93,7 +91,7 @@ export function CustomerList({ onEdit }: CustomerListProps) {
       )}
 
       <div className="space-y-2">
-        {filtered.map((customer) => (
+        {items.map((customer) => (
           <Card key={customer.id} className="border-border/70 bg-card/90 backdrop-blur-sm">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0 flex-1">
