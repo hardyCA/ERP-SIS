@@ -392,7 +392,61 @@ interface SaleInvoiceData {
   creditTotalPaid: number
 }
 
-export function exportSaleInvoice(data: SaleInvoiceData, print = false) {
+interface LoadedImage {
+  dataUrl: string
+  w: number
+  h: number
+}
+
+const imageCache = new Map<string, Promise<LoadedImage | null>>()
+
+function loadPublicImage(path: string): Promise<LoadedImage | null> {
+  let cached = imageCache.get(path)
+  if (!cached) {
+    cached = new Promise((resolve) => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          resolve(null)
+          return
+        }
+        ctx.drawImage(img, 0, 0)
+        resolve({
+          dataUrl: canvas.toDataURL('image/png'),
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+        })
+      }
+      img.onerror = () => resolve(null)
+      img.src = path
+    })
+    imageCache.set(path, cached)
+  }
+  return cached
+}
+
+function scaleImage(img: LoadedImage, maxW: number, maxH: number) {
+  const ratio = img.w / img.h
+  let w = maxW
+  let h = w / ratio
+  if (h > maxH) {
+    h = maxH
+    w = h * ratio
+  }
+  return { w, h }
+}
+
+export async function exportSaleInvoice(data: SaleInvoiceData, print = false) {
+  const [gaciaLogo, comprobanteLogo] = await Promise.all([
+    loadPublicImage('/LOGO GACIA.png'),
+    loadPublicImage('/logo 2.png'),
+  ])
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pw = doc.internal.pageSize.getWidth()
   const ml = 14
@@ -409,46 +463,53 @@ export function exportSaleInvoice(data: SaleInvoiceData, print = false) {
 
   // === HEADER ===
   const logoY = 14
-  doc.setFontSize(20)
-  setBold()
-  doc.text('SIIM', ml, logoY)
-  setNormal()
-  doc.setFontSize(6.5)
-  doc.setTextColor(120)
-  doc.text('Sistema Integral de Inventarios', ml, logoY + 3.5)
-
-  doc.setFontSize(8)
-  setBold()
-  doc.setTextColor(0)
-  const centerText = data.branch
   const centerX = pw / 2
-  doc.text(centerText, centerX, logoY + 8, { align: 'center' })
-  setNormal()
-  doc.setFontSize(7)
-  doc.setTextColor(80)
-  if (data.branchAddress) doc.text(data.branchAddress, centerX, logoY + 11.5, { align: 'center' })
-  if (data.branchPhone) doc.text(`Tel: ${data.branchPhone}`, centerX, logoY + 15, { align: 'center' })
-
   const blockW = 52
   const blockX = rightX - blockW
 
-  doc.setFontSize(6)
-  setNormal()
-  doc.setTextColor(120)
-  doc.text('COMPROBANTE', blockX + blockW / 2, logoY + 0.5, { align: 'center' })
+  // IZQUIERDA: logo GACIA
+  if (gaciaLogo) {
+    const gacia = scaleImage(gaciaLogo, 34, 18)
+    doc.addImage(gaciaLogo.dataUrl, 'PNG', ml, logoY - 1, gacia.w, gacia.h)
+  }
 
+  // DERECHA ARRIBA: logo 2 (reemplaza el texto COMPROBANTE)
+  if (comprobanteLogo) {
+    const comp = scaleImage(comprobanteLogo, 26, 16)
+    doc.addImage(comprobanteLogo.dataUrl, 'PNG', blockX + blockW / 2 - comp.w / 2, logoY - 1, comp.w, comp.h)
+  } else {
+    doc.setFontSize(6)
+    setNormal()
+    doc.setTextColor(120)
+    doc.text('COMPROBANTE', blockX + blockW / 2, logoY + 0.5, { align: 'center' })
+  }
+
+  // CENTRO: GACIA BOLIVIA + datos de la sucursal
+  doc.setFontSize(18)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('GACIA BOLIVIA', centerX, logoY + 5, { align: 'center' })
+  setNormal()
+  doc.setFontSize(8)
+  doc.setTextColor(0)
+  doc.text(`Sucursal - ${data.branch}`, centerX, logoY + 9.5, { align: 'center' })
+  doc.setFontSize(7)
+  doc.setTextColor(80)
+  if (data.branchAddress) doc.text(data.branchAddress, centerX, logoY + 13, { align: 'center' })
+  if (data.branchPhone) doc.text(`pedidos: ${data.branchPhone}`, centerX, logoY + 16.5, { align: 'center' })
+
+  // DERECHA: número y fecha debajo del logo 2
   doc.setFontSize(9)
   setBold()
   doc.setTextColor(0)
-  doc.text(`N° ${data.number}`, blockX + blockW / 2, logoY + 5.5, { align: 'center' })
-
+  doc.text(`N° ${data.number}`, blockX + blockW / 2, logoY + 18.5, { align: 'center' })
   doc.setFontSize(6)
   setNormal()
   doc.setTextColor(120)
-  doc.text(`${data.date} - ${data.time}`, blockX + blockW / 2, logoY + 9.5, { align: 'center' })
+  doc.text(`${data.date} - ${data.time}`, blockX + blockW / 2, logoY + 22, { align: 'center' })
 
   // === CLIENT INFO ===
-  const clientY = logoY + 17
+  const clientY = logoY + 25
   doc.setFontSize(7.5)
   setBold()
   doc.setTextColor(0)

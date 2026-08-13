@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Sidebar } from '@/shared/components/sidebar'
 import { Button } from '@/shared/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/shared/components/ui/sheet'
-import { Menu, Sparkles, Building2, LogOut } from 'lucide-react'
+import { Menu, Building2, LogOut } from 'lucide-react'
 import { BranchProvider, useBranch } from '@/shared/contexts/branch-context'
 import { logoutUser } from '@/modules/auth/actions'
 
@@ -75,10 +76,10 @@ function InnerLayout({ children, sidebarOpen, setSidebarOpen }: { children: Reac
             </Sheet>
 
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
-                <Sparkles className="h-4 w-4" />
+              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-white shadow-xs ring-1 ring-border">
+                <Image src="/LOGO GACIA.png" alt="GACIA" width={32} height={32} className="h-full w-full object-cover" />
               </div>
-              <span className="font-bold text-sm">SIIM ERP</span>
+              <span className="font-bold text-sm">GACIA</span>
             </div>
           </div>
 

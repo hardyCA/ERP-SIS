@@ -226,7 +226,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => {
+            onClick={async () => {
               const ptLabel = paymentLabels[pt] ?? pt
               const branchesData = sale.branches as Record<string, unknown> | undefined
               const customersData = sale.customers as Record<string, unknown> | undefined
@@ -250,7 +250,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                   })
                 })
               })
-              exportSaleInvoice({
+              await exportSaleInvoice({
                 number: saleNumber,
                 date: new Date(sale.created_at).toLocaleDateString(),
                 time: new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -286,7 +286,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
             <Printer className="h-3.5 w-3.5 mr-1.5" /> Imprimir
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => {
+            onClick={async () => {
               const ptLabel = paymentLabels[pt] ?? pt
               const branchesData = sale.branches as Record<string, unknown> | undefined
               const customersData = sale.customers as Record<string, unknown> | undefined
@@ -310,7 +310,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                   })
                 })
               })
-              exportSaleInvoice({
+              await exportSaleInvoice({
                 number: saleNumber,
                 date: new Date(sale.created_at).toLocaleDateString(),
                 time: new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/shared/lib/utils'
@@ -70,13 +71,10 @@ export function Sidebar({ onClose }: SidebarProps) {
       {/* Brand Header */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-sidebar-border/60">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 transition-transform group-hover:scale-105">
-            <Sparkles className="h-5 w-5" />
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-white shadow-md shadow-primary/20 ring-1 ring-border transition-transform group-hover:scale-105">
+            <Image src="/LOGO GACIA.png" alt="GACIA" width={40} height={40} className="h-full w-full object-cover" />
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-base tracking-tight text-sidebar-foreground">SIIM ERP</span>
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Enterprise</span>
-          </div>
+          <span className="font-bold text-base tracking-tight text-sidebar-foreground leading-tight">GACIA</span>
         </Link>
       </div>
 
