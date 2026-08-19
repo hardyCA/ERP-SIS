@@ -476,8 +476,8 @@ export function SaleForm() {
             <div>
               <div className="divide-y">
                 {items.map((item) => (
-                  <div key={item.product_id} className="flex flex-wrap items-center gap-3 py-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div key={item.product_id} className="flex items-center gap-2 py-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
                       {item.image_url ? (
                         <Image src={item.image_url} alt={item.product_name} width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" />
                       ) : (
@@ -490,21 +490,21 @@ export function SaleForm() {
                         <p className="text-xs text-muted-foreground">Bs {item.price.toFixed(2)} c/u{item.unit ? ` (${item.unit})` : ''}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
                         onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
                         <Minus className="h-3.5 w-3.5" />
                       </button>
-                      <span className="text-sm font-mono w-8 text-center tabular-nums font-medium">{item.quantity}</span>
+                      <span className="text-sm font-mono w-7 text-center tabular-nums font-medium">{item.quantity}</span>
                       <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
                         onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <div className="text-right min-w-[80px]">
+                    <div className="text-right min-w-[70px] shrink-0">
                       <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.price).toFixed(2)}</p>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
                       onClick={() => removeItem(item.product_id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -582,7 +582,7 @@ export function SaleForm() {
 
                 {paymentType === 'mixed' && (
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border px-4 py-3">
+                    <div className={cn('rounded-xl border px-4 py-3', parseFloat(cashAmount) > 0 ? 'bg-success/5' : 'bg-muted/30')}>
                       <label className="text-xs text-muted-foreground font-medium flex items-center gap-1 mb-2">
                         <WalletMinimal className="h-4 w-4 text-success" /> Efectivo
                       </label>
@@ -596,14 +596,17 @@ export function SaleForm() {
                         className="text-right font-mono" placeholder="0.00" />
                     </div>
                     <div className={cn('rounded-xl border px-4 py-3', parseFloat(qrAmount) > 0 ? 'bg-info/5' : 'bg-muted/30')}>
-                      <div className="flex items-center justify-between h-full">
-                        <div>
-                          <label className="text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1">
-                            <ScanQrCode className="h-4 w-4 text-info" /> QR / Transf.
-                          </label>
-                          <span className="text-lg font-bold font-mono text-info">Bs {(parseFloat(qrAmount) || 0).toFixed(2)}</span>
-                        </div>
-                      </div>
+                      <label className="text-xs text-muted-foreground font-medium flex items-center gap-1 mb-2">
+                        <ScanQrCode className="h-4 w-4 text-info" /> QR / Transf.
+                      </label>
+                      <Input type="text" inputMode="decimal"
+                        value={qrAmount}
+                        onChange={(e) => {
+                          setQrAmount(e.target.value)
+                          const qr = parseFloat(e.target.value) || 0
+                          setCashAmount(Math.max(0, total - qr) > 0 ? (total - qr).toFixed(2) : '0')
+                        }}
+                        className="text-right font-mono" placeholder="0.00" />
                     </div>
                   </div>
                 )}
@@ -648,7 +651,7 @@ export function SaleForm() {
                           ))}
                         </div>
                         {anticipoPaymentType === 'mixed' && (
-                          <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="text-xs text-muted-foreground">Efectivo</label>
                               <Input type="text" inputMode="decimal"
@@ -661,9 +664,17 @@ export function SaleForm() {
                                 }}
                                 className="text-right font-mono" placeholder="0.00" />
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground">QR</span>
-                              <span className="text-sm font-mono">Bs {(parseFloat(anticipoQr) || 0).toFixed(2)}</span>
+                            <div>
+                              <label className="text-xs text-muted-foreground">QR</label>
+                              <Input type="text" inputMode="decimal"
+                                value={anticipoQr}
+                                onChange={(e) => {
+                                  setAnticipoQr(e.target.value)
+                                  const a = parseFloat(creditAnticipo) || 0
+                                  const q = parseFloat(e.target.value) || 0
+                                  setAnticipoCash(Math.max(0, a - q) > 0 ? (a - q).toFixed(2) : '0')
+                                }}
+                                className="text-right font-mono" placeholder="0.00" />
                             </div>
                           </div>
                         )}

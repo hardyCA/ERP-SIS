@@ -5,6 +5,7 @@ import { createClient } from '@/shared/lib/supabase/server'
 import { adjustStockSchema, updatePriceSchema } from './types'
 import type { ActionResponse } from './types'
 import type { Branches, Brands, Categories } from '@/shared/types/database.types'
+import { assertAdmin } from '@/modules/users/service'
 
 export async function getInventory(branchId: string, brandId?: string, categoryId?: string) {
   try {
@@ -101,6 +102,8 @@ export async function getBranchesList(): Promise<ActionResponse<Branches[]>> {
 
 export async function adjustStock(formData: FormData): Promise<ActionResponse> {
   try {
+    await assertAdmin()
+
     const validated = adjustStockSchema.safeParse({
       product_id: formData.get('product_id'),
       branch_id: formData.get('branch_id'),

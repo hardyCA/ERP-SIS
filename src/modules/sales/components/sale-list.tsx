@@ -193,6 +193,7 @@ export function SaleList() {
                         {isDeleted && (
                           <span className="block text-[10px] text-destructive">
                             Anulada {new Date(s.deleted_at as string).toLocaleDateString()}
+                            {s.deleted_by_name ? ` · por ${s.deleted_by_name}` : ''}
                           </span>
                         )}
                       </TableCell>

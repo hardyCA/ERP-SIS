@@ -5,7 +5,6 @@ import { createClient } from '@/shared/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { assertAdmin } from '@/modules/users/service'
 import { createSaleSchema } from './types'
 import type { ActionResponse } from './types'
 
@@ -50,7 +49,7 @@ export async function getSales(params?: {
     if (error) throw new Error(error.message)
 
     const admin = await getAdminClient()
-    const userIds = [...new Set((data ?? []).map(s => s.created_by).filter(Boolean))]
+    const userIds = [...new Set((data ?? []).flatMap(s => [s.created_by, s.deleted_by]).filter(Boolean))]
     const userMap: Record<string, string> = {}
     if (userIds.length > 0) {
       const { data: users } = await admin.auth.admin.listUsers()
@@ -62,6 +61,7 @@ export async function getSales(params?: {
     const enriched = (data ?? []).map(s => ({
       ...s,
       created_by_name: s.created_by ? userMap[s.created_by] ?? 'Usuario' : null,
+      deleted_by_name: s.deleted_by ? userMap[s.deleted_by] ?? 'Usuario' : null,
     }))
 
     return { success: true, data: enriched, total: count ?? 0 }
@@ -98,14 +98,20 @@ export async function getSaleById(id: string, includeDeleted = false) {
     }
 
     let created_by_name: string | null = null
+    let deleted_by_name: string | null = null
+    const admin = await getAdminClient()
     if (sale.created_by) {
-      const admin = await getAdminClient()
       const { data: user } = await admin.auth.admin.getUserById(sale.created_by)
       const meta = user?.user?.user_metadata as Record<string, unknown> | undefined
       created_by_name = (meta?.full_name as string) || user?.user?.email || 'Usuario'
     }
+    if (sale.deleted_by) {
+      const { data: user } = await admin.auth.admin.getUserById(sale.deleted_by)
+      const meta = user?.user?.user_metadata as Record<string, unknown> | undefined
+      deleted_by_name = (meta?.full_name as string) || user?.user?.email || 'Usuario'
+    }
 
-    return { success: true, data: { ...sale, items: items ?? [], created_by_name } }
+    return { success: true, data: { ...sale, items: items ?? [], created_by_name, deleted_by_name } }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }
@@ -391,8 +397,6 @@ export async function deleteSale(formData: FormData): Promise<ActionResponse> {
     if (!validated.success) {
       return { success: false, message: 'ID de venta inválido' }
     }
-
-    await assertAdmin()
 
     const supabase = await createClient()
     const { error } = await supabase.rpc('delete_sale', { p_sale_id: validated.data })

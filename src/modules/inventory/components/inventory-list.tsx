@@ -17,7 +17,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { AlertTriangle, ChevronLeft, ChevronRight, Search, Pencil, Check, X, Warehouse } from 'lucide-react'
-import { useShowCost } from '@/shared/lib/use-role'
+import { useIsAdmin, useShowCost } from '@/shared/lib/use-role'
 
 const PAGE_SIZE = 15
 
@@ -30,6 +30,7 @@ interface InventoryListProps {
 
 export function InventoryList({ onAdjust, branchId, brandId, categoryId }: InventoryListProps) {
   const showCost = useShowCost()
+  const isAdmin = useIsAdmin()
   const queryClient = useQueryClient()
   const [editPrice, setEditPrice] = useState<{ productId: string; value: string } | null>(null)
   const [page, setPage] = useState(1)
@@ -143,13 +144,13 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                   <TableHead className="text-center">Stock Actual</TableHead>
                   {showCost && <TableHead>Costo Base</TableHead>}
                   <TableHead>Precio de Venta</TableHead>
-                  <TableHead className="w-28 text-right pr-4">Acción</TableHead>
+                  {isAdmin && <TableHead className="w-28 text-right pr-4">Acción</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={showCost ? 7 : 6} className="text-center text-muted-foreground py-10">
+                    <TableCell colSpan={5 + (showCost ? 1 : 0) + (isAdmin ? 1 : 0)} className="text-center text-muted-foreground py-10">
                       {searchQuery ? `No se encontraron productos para "${searchQuery}"` : 'No hay inventario registrado en esta categoría.'}
                     </TableCell>
                   </TableRow>
@@ -216,14 +217,16 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                         )}
                       </TableCell>
                       <TableCell className="text-right pr-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs font-medium border-border/80"
-                          onClick={() => onAdjust(productId, productName, qty, branchId)}
-                        >
-                          Ajustar Stock
-                        </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs font-medium border-border/80"
+                            onClick={() => onAdjust(productId, productName, qty, branchId)}
+                          >
+                            Ajustar Stock
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -304,14 +307,16 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                       )}
                     </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs font-medium"
-                      onClick={() => onAdjust(productId, productName, qty, branchId)}
-                    >
-                      Ajustar Stock
-                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs font-medium"
+                        onClick={() => onAdjust(productId, productName, qty, branchId)}
+                      >
+                        Ajustar Stock
+                      </Button>
+                    )}
                   </div>
                 </div>
               )

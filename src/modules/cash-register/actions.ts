@@ -24,6 +24,8 @@ export async function getMovements(params?: {
   page?: number
   pageSize?: number
   filter?: 'all' | 'income' | 'expense'
+  fromDate?: string
+  toDate?: string
 }) {
   try {
     const supabase = await createClient()
@@ -41,6 +43,8 @@ export async function getMovements(params?: {
     if (params?.branchId) query = query.eq('branch_id', params.branchId)
     if (params?.filter === 'income') query = query.in('type', incomeTypes)
     if (params?.filter === 'expense') query = query.in('type', expenseTypes)
+    if (params?.fromDate) query = query.gte('created_at', params.fromDate)
+    if (params?.toDate) query = query.lte('created_at', params.toDate + 'T23:59:59.999Z')
 
     const { data, error, count } = await query
     if (error) throw new Error(error.message)
@@ -201,7 +205,7 @@ export async function createMovement(formData: FormData): Promise<ActionResponse
       qr_amount: qrPart,
       description: desc,
       created_by: user?.id,
-      handler_user_id: validated.data.handler_user_id,
+      handler_user_id: user?.id,
     })
     if (error) throw new Error(error.message)
 

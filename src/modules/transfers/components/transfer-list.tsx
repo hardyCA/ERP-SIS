@@ -120,7 +120,7 @@ export function TransferList() {
     }
     const from = (t.from_branch as Record<string, unknown>) ?? {}
     const to = (t.to_branch as Record<string, unknown>) ?? {}
-    exportTransferPdf({
+    await exportTransferPdf({
       number: (t.number as number)?.toString().padStart(4, '0') ?? id.slice(0, 8),
       date: new Date(t.created_at as string).toLocaleString(),
       fromBranch: (from.name as string) ?? '—',
@@ -136,10 +136,9 @@ export function TransferList() {
       notes: (t.notes as string) ?? null,
       items: items.map(i => {
         const p = i.products
-        const u = p?.units_of_measure
-        const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
         return {
-          product_name: p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—',
+          product_name: p?.name ?? '—',
+          unit: p?.units_of_measure?.abbreviation ?? null,
           quantity: Number(i.quantity),
           unit_cost: Number(i.unit_cost),
         }

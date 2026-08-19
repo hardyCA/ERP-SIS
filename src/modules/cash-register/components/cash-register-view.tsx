@@ -12,6 +12,7 @@ import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
+import { useCurrentUserId } from '@/shared/lib/use-role'
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { ArrowDown, ArrowUp, Plus, Minus, Wallet, ChevronLeft, ChevronRight, ArrowLeftRight, FileText, Printer } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Minus, Wallet, ChevronLeft, ChevronRight, ArrowLeftRight, FileText, Printer, Calendar } from 'lucide-react'
 import { movementTypeLabels, reverseTypes } from '../types'
 import { exportToPdf, printElement } from '@/shared/lib/export'
 
@@ -43,6 +44,7 @@ const PAGE_SIZE = 15
 export function CashRegisterView() {
   const queryClient = useQueryClient()
   const { branchId, branchName } = useBranch()
+  const currentUserId = useCurrentUserId()
 
   const [showModal, setShowModal] = useState(false)
   const [modalType, setModalType] = useState<'manual_income' | 'manual_expense' | 'owner_withdrawal'>('manual_income')
@@ -55,6 +57,10 @@ export function CashRegisterView() {
   const [submitting, setSubmitting] = useState(false)
   const [page, setPage] = useState(1)
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [appliedFrom, setAppliedFrom] = useState('')
+  const [appliedTo, setAppliedTo] = useState('')
 
   const [showTransfer, setShowTransfer] = useState(false)
   const [transferDest, setTransferDest] = useState('')
@@ -69,8 +75,8 @@ export function CashRegisterView() {
   useEffect(() => { setPage(1) }, [branchId, filter])
 
   const { data: movementsData, isLoading } = useQuery({
-    queryKey: ['cash-movements', branchId, page, filter],
-    queryFn: () => getMovements({ branchId: branchId || undefined, page, pageSize: PAGE_SIZE, filter }),
+    queryKey: ['cash-movements', branchId, page, filter, appliedFrom, appliedTo],
+    queryFn: () => getMovements({ branchId: branchId || undefined, page, pageSize: PAGE_SIZE, filter, fromDate: appliedFrom || undefined, toDate: appliedTo || undefined }),
     staleTime: 0,
     enabled: !!branchId,
   })
@@ -118,9 +124,25 @@ export function CashRegisterView() {
     setCashAmt('')
     setQrAmt('')
     setDescription('')
-    setHandlerUserId('')
+    setHandlerUserId(currentUserId ?? '')
     setShowModal(true)
   }
+
+  const applyDateFilter = () => {
+    setPage(1)
+    setAppliedFrom(fromDate)
+    setAppliedTo(toDate)
+  }
+
+  const clearDateFilter = () => {
+    setFromDate('')
+    setToDate('')
+    setAppliedFrom('')
+    setAppliedTo('')
+    setPage(1)
+  }
+
+  const hasDateFilter = !!appliedFrom || !!appliedTo
 
   const handleSubmit = async () => {
     if (!branchId) { toast.error('Selecciona una sucursal en el menú lateral'); return }
@@ -134,7 +156,7 @@ export function CashRegisterView() {
       toast.error('Ingresa un monto válido'); return
     }
     if (!description) { toast.error('Ingresa una descripción'); return }
-    if (!handlerUserId) { toast.error('Selecciona quién cobró o retiró el monto'); return }
+    if (!handlerUserId) { toast.error('No se pudo identificar el usuario que cobró o retiró'); return }
 
     setSubmitting(true)
     const finalAmount = method === 'mixed' ? String((parseFloat(cashAmt) || 0) + (parseFloat(qrAmt) || 0)) : amount
@@ -368,6 +390,21 @@ export function CashRegisterView() {
                 )}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-2.5">
+              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Desde</label>
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-8 w-36 text-xs" />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Hasta</label>
+                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-8 w-36 text-xs" />
+              </div>
+              <Button size="sm" variant="default" className="h-8 text-xs" onClick={applyDateFilter}>Filtrar</Button>
+              {hasDateFilter && (
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={clearDateFilter}>Limpiar</Button>
+              )}
+            </div>
             {isLoading ? (
               <div className="space-y-3 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
             ) : (
@@ -539,18 +576,11 @@ export function CashRegisterView() {
               <label className="text-sm font-medium">
                 {modalType === 'manual_income' ? '¿Quién cobró el monto?' : '¿Quién retiró el monto?'}
               </label>
-              <Select value={handlerUserId} onValueChange={(v) => setHandlerUserId(v ?? '')}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleccionar usuario">
-                    {handlerUserId ? users.find(u => u.id === handlerUserId)?.name ?? '' : ''}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                value={currentUserId ? users.find(u => u.id === currentUserId)?.name ?? '' : ''}
+                disabled
+                className="bg-muted/50"
+              />
             </div>
             <Button onClick={handleSubmit} disabled={submitting} className="w-full">
               {submitting ? 'Guardando...' : 'Registrar'}

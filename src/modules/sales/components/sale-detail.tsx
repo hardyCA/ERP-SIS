@@ -88,7 +88,6 @@ const paymentColors: Record<string, string> = {
 
 interface SaleDetailProps {
   saleId: string
-  isAdmin?: boolean
 }
 
 function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
@@ -105,7 +104,7 @@ function InfoRow({ icon: Icon, label, value }: { icon: typeof Building2; label: 
   )
 }
 
-export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
+export function SaleDetail({ saleId }: SaleDetailProps) {
   const queryClient = useQueryClient()
   const router = useRouter()
   const [payingCreditId, setPayingCreditId] = useState<string | null>(null)
@@ -207,7 +206,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
           <div>
             <p className="text-sm font-semibold text-destructive">Venta anulada</p>
             <p className="text-xs text-destructive/80">
-              Esta venta fue anulada el {new Date(sale.deleted_at as string).toLocaleString()}. El stock se devolvió, la caja se revirtió y el crédito se canceló.
+              Esta venta fue anulada el {new Date(sale.deleted_at as string).toLocaleString()}{sale.deleted_by_name ? ` por ${sale.deleted_by_name}` : ''}. El stock se devolvió, la caja se revirtió y el crédito se canceló.
             </p>
           </div>
         </div>
@@ -269,10 +268,9 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                 notes: sale.notes as string | null,
                 items: (sale.items ?? []).map((i: { products: { name: string; units_of_measure: { name: string; abbreviation: string | null } | null } | null; quantity: number; price: number; subtotal: number }) => {
                   const p = i.products
-                  const u = p?.units_of_measure
-                  const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
                   return {
-                    product_name: p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—',
+                    product_name: p?.name ?? '—',
+                    unit: p?.units_of_measure?.abbreviation ?? null,
                     quantity: i.quantity,
                     price: Number(i.price),
                     subtotal: Number(i.subtotal),
@@ -329,10 +327,9 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
                 notes: sale.notes as string | null,
                 items: (sale.items ?? []).map((i: { products: { name: string; units_of_measure: { name: string; abbreviation: string | null } | null } | null; quantity: number; price: number; subtotal: number }) => {
                   const p = i.products
-                  const u = p?.units_of_measure
-                  const unitLabel = u ? (u.abbreviation ? `${u.name} (${u.abbreviation})` : u.name) : null
                   return {
-                    product_name: p?.name ? `${p.name}${unitLabel ? ` (${unitLabel})` : ''}` : '—',
+                    product_name: p?.name ?? '—',
+                    unit: p?.units_of_measure?.abbreviation ?? null,
                     quantity: i.quantity,
                     price: Number(i.price),
                     subtotal: Number(i.subtotal),
@@ -345,7 +342,7 @@ export function SaleDetail({ saleId, isAdmin = false }: SaleDetailProps) {
             }}>
             <FileDown className="h-3.5 w-3.5 mr-1.5" /> PDF
           </Button>
-          {isAdmin && !isDeleted && (
+          {!isDeleted && (
             <Button
               variant="outline"
               size="sm"

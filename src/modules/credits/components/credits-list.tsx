@@ -33,9 +33,7 @@ function getDaysAgo(dateStr: string): number {
 }
 
 function daysBadge(days: number) {
-  if (days <= 7) return 'text-success'
-  if (days <= 15) return 'text-warning'
-  if (days <= 30) return 'text-pending'
+  if (days <= 15) return 'text-success'
   return 'text-destructive font-semibold'
 }
 

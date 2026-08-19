@@ -3,17 +3,17 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/shared/lib/supabase/browser'
 
-export function useShowCost() {
-  const [show, setShow] = useState(false)
+export function useIsAdmin() {
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setShow(false); return }
+      if (!user) { setIsAdmin(false); return }
 
       if (user.email === 'admin@gmail.com') {
-        setShow(true)
+        setIsAdmin(true)
         return
       }
 
@@ -22,13 +22,15 @@ export function useShowCost() {
         .select('role')
         .eq('user_id', user.id)
 
-      if (roles?.some(r => r.role === 'admin')) {
-        setShow(true)
-      }
+      setIsAdmin(!!roles?.some(r => r.role === 'admin'))
     })()
   }, [])
 
-  return show
+  return isAdmin
+}
+
+export function useShowCost() {
+  return useIsAdmin()
 }
 
 export function useCurrentUser(): { name: string; isLoading: boolean } {
@@ -49,4 +51,18 @@ export function useCurrentUser(): { name: string; isLoading: boolean } {
   }, [])
 
   return { name, isLoading }
+}
+
+export function useCurrentUserId(): string | null {
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUserId(user?.id ?? null)
+    })()
+  }, [])
+
+  return userId
 }

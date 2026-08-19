@@ -324,11 +324,8 @@ function numeroALetras(n: number): string {
   const decenas = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA']
   const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS']
 
-  const entero = Math.floor(n)
-  const decimales = Math.round((n - entero) * 100)
-
-  function convertirEntero(num: number): string {
-    if (num === 0) return 'CERO'
+  function convertirHasta999(num: number): string {
+    if (num === 0) return ''
     if (num === 100) return 'CIEN'
 
     const c = Math.floor(num / 100)
@@ -348,6 +345,35 @@ function numeroALetras(n: number): string {
     return res.trim()
   }
 
+  function convertirEntero(num: number): string {
+    if (num === 0) return 'CERO'
+
+    const millones = Math.floor(num / 1000000)
+    const miles = Math.floor((num % 1000000) / 1000)
+    const resto = num % 1000
+
+    let res = ''
+
+    if (millones > 0) {
+      res += millones === 1 ? 'UN MILLÓN' : (convertirHasta999(millones) || 'CERO') + ' MILLONES'
+    }
+
+    if (miles > 0) {
+      const milesStr = miles === 1 ? 'MIL' : (convertirHasta999(miles) || 'CERO') + ' MIL'
+      res += res ? ' ' + milesStr : milesStr
+    }
+
+    const restoStr = convertirHasta999(resto)
+    if (restoStr) {
+      res += res ? ' ' + restoStr : restoStr
+    }
+
+    return res.trim()
+  }
+
+  const entero = Math.floor(n)
+  const decimales = Math.round((n - entero) * 100)
+
   if (entero === 0) return `CERO CON ${decimales.toString().padStart(2, '0')}/100`
   const palabras = convertirEntero(entero)
   if (decimales > 0) return `${palabras} CON ${decimales.toString().padStart(2, '0')}/100`
@@ -357,6 +383,7 @@ function numeroALetras(n: number): string {
 interface SaleInvoiceItem {
   code?: string
   product_name: string
+  unit?: string | null
   quantity: number
   price: number
   subtotal: number
@@ -493,23 +520,46 @@ export async function exportSaleInvoice(data: SaleInvoiceData, print = false) {
   doc.setFontSize(8)
   doc.setTextColor(0)
   doc.text(`Sucursal - ${data.branch}`, centerX, logoY + 9.5, { align: 'center' })
+
+  // Dirección envuelta (salta a varias líneas si es larga)
   doc.setFontSize(7)
   doc.setTextColor(80)
-  if (data.branchAddress) doc.text(data.branchAddress, centerX, logoY + 13, { align: 'center' })
-  if (data.branchPhone) doc.text(`pedidos: ${data.branchPhone}`, centerX, logoY + 16.5, { align: 'center' })
+  const addrLines = data.branchAddress ? (doc.splitTextToSize(data.branchAddress, 92) as string[]) : []
+  let addrY = logoY + 13
+  for (const line of addrLines) {
+    doc.text(line, centerX, addrY, { align: 'center' })
+    addrY += 3.2
+  }
+  const extraShift = Math.max(0, addrLines.length - 1) * 3.2
+
+  let phoneY = logoY + 16.5 + extraShift
+  if (data.branchPhone) {
+    doc.setFontSize(7)
+    doc.setTextColor(80)
+    doc.text(`pedidos: ${data.branchPhone}`, centerX, phoneY, { align: 'center' })
+    phoneY += 3.2
+  }
 
   // DERECHA: número y fecha debajo del logo 2
   doc.setFontSize(9)
   setBold()
   doc.setTextColor(0)
-  doc.text(`N° ${data.number}`, blockX + blockW / 2, logoY + 18.5, { align: 'center' })
+  doc.text(`N° ${data.number}`, blockX + blockW / 2, logoY + 18.5 + extraShift, { align: 'center' })
   doc.setFontSize(6)
   setNormal()
   doc.setTextColor(120)
-  doc.text(`${data.date} - ${data.time}`, blockX + blockW / 2, logoY + 22, { align: 'center' })
+  doc.text(`${data.date} - ${data.time}`, blockX + blockW / 2, logoY + 22 + extraShift, { align: 'center' })
+  doc.setFontSize(6.5)
+  setBold()
+  doc.setTextColor(80)
+  doc.text('(PILOTO) ATENCIÓN & RECLAMOS', blockX + blockW / 2, logoY + 25.5 + extraShift, { align: 'center' })
+  setNormal()
+  doc.setFontSize(6.5)
+  doc.setTextColor(120)
+  doc.text('71522600', blockX + blockW / 2, logoY + 28.5 + extraShift, { align: 'center' })
 
   // === CLIENT INFO ===
-  const clientY = logoY + 25
+  const clientY = Math.max(logoY + 25, phoneY + 1)
   doc.setFontSize(7.5)
   setBold()
   doc.setTextColor(0)
@@ -531,6 +581,7 @@ export async function exportSaleInvoice(data: SaleInvoiceData, print = false) {
       ...(hasCodes ? ['Código'] : []),
       'Nombre',
       'Cantidad',
+      'Und.',
       'Precio Unit.',
       'Subtotal',
     ]],
@@ -538,11 +589,13 @@ export async function exportSaleInvoice(data: SaleInvoiceData, print = false) {
       ...(hasCodes ? [i.code ?? ''] : []),
       i.product_name,
       String(i.quantity),
+      i.unit ?? '',
       `Bs ${i.price.toFixed(2)}`,
       `Bs ${i.subtotal.toFixed(2)}`,
     ]),
     foot: [[
       ...(hasCodes ? [''] : []),
+      '',
       '',
       '',
       'TOTAL',
@@ -574,8 +627,9 @@ export async function exportSaleInvoice(data: SaleInvoiceData, print = false) {
       0: { cellWidth: hasCodes ? 24 : undefined },
       1: { cellWidth: hasCodes ? undefined : undefined },
       2: { halign: 'center' },
-      3: { halign: 'right' },
+      3: { halign: 'center' },
       4: { halign: 'right' },
+      5: { halign: 'right' },
     },
     tableLineColor: [0, 0, 0],
     tableLineWidth: 0.3,
@@ -983,10 +1037,12 @@ interface TransferPdfData {
   receivedBy: string
   statusLabel: string
   notes: string | null
-  items: { product_name: string; quantity: number; unit_cost: number }[]
+  items: { product_name: string; unit?: string | null; quantity: number; unit_cost: number }[]
 }
 
-export function exportTransferPdf(data: TransferPdfData, showCost = true) {
+export async function exportTransferPdf(data: TransferPdfData, showCost = true) {
+  const [gaciaLogo] = await Promise.all([loadPublicImage('/LOGO GACIA.png')])
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pw = doc.internal.pageSize.getWidth()
   const ml = 14
@@ -999,13 +1055,19 @@ export function exportTransferPdf(data: TransferPdfData, showCost = true) {
   function setNormal() { doc.setFont('helvetica', 'normal') }
 
   const logoY = 14
-  doc.setFontSize(20)
-  setBold()
-  doc.text('SIIM', ml, logoY)
-  setNormal()
-  doc.setFontSize(6.5)
-  doc.setTextColor(120)
-  doc.text('Sistema Integral de Inventarios', ml, logoY + 3.5)
+  // Logo GACIA en lugar de "SIIM / Sistema Integral de Inventarios"
+  if (gaciaLogo) {
+    const gacia = scaleImage(gaciaLogo, 34, 18)
+    doc.addImage(gaciaLogo.dataUrl, 'PNG', ml, logoY - 1, gacia.w, gacia.h)
+  } else {
+    doc.setFontSize(20)
+    setBold()
+    doc.text('SIIM', ml, logoY)
+    setNormal()
+    doc.setFontSize(6.5)
+    doc.setTextColor(120)
+    doc.text('Sistema Integral de Inventarios', ml, logoY + 3.5)
+  }
 
   doc.setFontSize(14)
   setBold()
@@ -1043,38 +1105,75 @@ export function exportTransferPdf(data: TransferPdfData, showCost = true) {
   doc.setTextColor(80)
   doc.setFontSize(7.5)
 
-  doc.text(`Origen: ${data.fromBranch}`, ml, infoY + 4.5)
-  if (data.fromBranchAddress) doc.text(`Dirección: ${data.fromBranchAddress}`, ml, infoY + 8.5)
-  if (data.fromBranchPhone) doc.text(`Tel: ${data.fromBranchPhone}`, ml, infoY + 12.5)
-  doc.text(`Destino: ${data.toBranch}`, rightX, infoY + 4.5, { align: 'right' })
-  if (data.toBranchAddress) doc.text(`Dirección: ${data.toBranchAddress}`, rightX, infoY + 8.5, { align: 'right' })
-  if (data.toBranchPhone) doc.text(`Tel: ${data.toBranchPhone}`, rightX, infoY + 12.5, { align: 'right' })
+  const halfW = (rightX - ml) / 2
+  const addrStep = 3.4
 
-  const tableStartY = infoY + 17
+  // Columna izquierda (Origen)
+  let leftY = infoY + 4.5
+  setBold()
+  doc.setTextColor(0)
+  doc.text(`Origen: ${data.fromBranch}`, ml, leftY)
+  setNormal()
+  doc.setTextColor(80)
+  leftY += 4
+  if (data.fromBranchAddress) {
+    const fromAddrLines = doc.splitTextToSize(`Dirección: ${data.fromBranchAddress}`, halfW - 4) as string[]
+    for (const line of fromAddrLines) {
+      doc.text(line, ml, leftY)
+      leftY += addrStep
+    }
+  }
+  if (data.fromBranchPhone) {
+    doc.text(`Tel: ${data.fromBranchPhone}`, ml, leftY + 0.5)
+    leftY += 4
+  }
+
+  // Columna derecha (Destino)
+  let rightY = infoY + 4.5
+  setBold()
+  doc.setTextColor(0)
+  doc.text(`Destino: ${data.toBranch}`, rightX, rightY, { align: 'right' })
+  setNormal()
+  doc.setTextColor(80)
+  rightY += 4
+  if (data.toBranchAddress) {
+    const toAddrLines = doc.splitTextToSize(`Dirección: ${data.toBranchAddress}`, halfW - 4) as string[]
+    for (const line of toAddrLines) {
+      doc.text(line, rightX, rightY, { align: 'right' })
+      rightY += addrStep
+    }
+  }
+  if (data.toBranchPhone) {
+    doc.text(`Tel: ${data.toBranchPhone}`, rightX, rightY + 0.5, { align: 'right' })
+    rightY += 4
+  }
+
+  const tableStartY = Math.max(infoY + 17, leftY + 2, rightY + 2)
 
   const itemsTotal = data.items.reduce((s, i) => s + i.quantity * i.unit_cost, 0)
   const totalUnits = data.items.reduce((s, i) => s + i.quantity, 0)
 
   const headRow = showCost
-    ? ['Nombre', 'Cantidad', 'Costo Unit.', 'Subtotal']
-    : ['Nombre', 'Cantidad']
+    ? ['Nombre', 'Cantidad', 'Und.', 'Costo Unit.', 'Subtotal']
+    : ['Nombre', 'Cantidad', 'Und.']
 
   const bodyRows = showCost
     ? data.items.map(i => [
         i.product_name,
         String(i.quantity),
+        i.unit ?? '',
         `Bs ${i.unit_cost.toFixed(2)}`,
         `Bs ${(i.quantity * i.unit_cost).toFixed(2)}`,
       ])
-    : data.items.map(i => [i.product_name, String(i.quantity)])
+    : data.items.map(i => [i.product_name, String(i.quantity), i.unit ?? ''])
 
   const footRow = showCost
-    ? ['', '', 'TOTAL', `Bs ${itemsTotal.toFixed(2)}`]
-    : ['', `TOTAL UNIDADES: ${totalUnits}`]
+    ? ['', '', '', 'TOTAL', `Bs ${itemsTotal.toFixed(2)}`]
+    : ['', `TOTAL UNIDADES: ${totalUnits}`, '']
 
   const colStyles: Record<string, { halign: 'left' | 'center' | 'right' | 'justify' }> = showCost
-    ? { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
-    : { 1: { halign: 'right' } }
+    ? { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' } }
+    : { 1: { halign: 'right' }, 2: { halign: 'center' } }
 
   autoTable(doc, {
     startY: tableStartY,
