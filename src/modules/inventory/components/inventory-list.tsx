@@ -24,15 +24,16 @@ const PAGE_SIZE = 15
 interface InventoryListProps {
   onAdjust: (productId: string, productName: string, currentQty: number, branchId: string) => void
   branchId: string
+  allBranches?: boolean
   brandId?: string
   categoryId?: string
 }
 
-export function InventoryList({ onAdjust, branchId, brandId, categoryId }: InventoryListProps) {
+export function InventoryList({ onAdjust, branchId, allBranches = false, brandId, categoryId }: InventoryListProps) {
   const showCost = useShowCost()
   const isAdmin = useIsAdmin()
   const queryClient = useQueryClient()
-  const [editPrice, setEditPrice] = useState<{ productId: string; value: string } | null>(null)
+  const [editPrice, setEditPrice] = useState<{ productId: string; branchId: string; value: string } | null>(null)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -41,18 +42,20 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1) }, [brandId, categoryId, searchQuery])
 
+  const showList = !!branchId || allBranches
+
   const { data: result, isLoading } = useQuery({
     queryKey: ['inventory', branchId, brandId, categoryId],
     queryFn: () => getInventory(branchId, brandId, categoryId),
-    enabled: !!branchId && hasFilters,
+    enabled: showList && hasFilters,
     staleTime: 0,
   })
 
   const handleSavePrice = async (productId: string) => {
-    if (!editPrice || !branchId) return
+    if (!editPrice) return
     const formData = new FormData()
     formData.set('product_id', productId)
-    formData.set('branch_id', branchId)
+    formData.set('branch_id', editPrice.branchId)
     formData.set('sale_price', editPrice.value)
     const res = await updateSalePrice(formData)
     if (res.success) {
@@ -72,6 +75,10 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
     return (unit.abbreviation as string | null) ?? (unit.name as string)
   }
 
+  const getBranchName = (item: Record<string, unknown>): string => {
+    return ((item.branches as Record<string, unknown> | undefined)?.name as string) ?? ''
+  }
+
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items
     return items.filter((item) => {
@@ -86,14 +93,14 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
 
   return (
     <div className="space-y-4">
-      {!branchId && (
+      {!branchId && !allBranches && (
         <div className="text-center text-muted-foreground py-12 border border-dashed rounded-2xl bg-muted/20">
           <Warehouse className="h-8 w-8 mx-auto mb-2 opacity-40" />
           <p className="text-sm font-medium">Selecciona una sucursal para ver su inventario</p>
         </div>
       )}
 
-      {branchId && !hasFilters && (
+      {showList && !hasFilters && (
         <div className="rounded-2xl border border-dashed p-8 text-center bg-card/60">
           <div className="text-muted-foreground mb-4 text-sm font-medium">Selecciona una marca y una categoría para consultar inventario</div>
           <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
@@ -110,7 +117,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
         </div>
       )}
 
-      {isLoading && branchId && hasFilters && (
+      {isLoading && showList && hasFilters && (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
@@ -118,7 +125,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
         </div>
       )}
 
-      {branchId && hasFilters && !isLoading && (
+      {showList && hasFilters && !isLoading && (
         <div className="space-y-4">
           {/* Buscador de Producto en Inventario */}
           {items.length > 0 && (
@@ -138,6 +145,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
+                  {allBranches && <TableHead>Sucursal</TableHead>}
                   <TableHead>Producto</TableHead>
                   <TableHead>Marca</TableHead>
                   <TableHead>Categoría</TableHead>
@@ -150,7 +158,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
               <TableBody>
                 {filteredItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5 + (showCost ? 1 : 0) + (isAdmin ? 1 : 0)} className="text-center text-muted-foreground py-10">
+                    <TableCell colSpan={5 + (allBranches ? 1 : 0) + (showCost ? 1 : 0) + (isAdmin ? 1 : 0)} className="text-center text-muted-foreground py-10">
                       {searchQuery ? `No se encontraron productos para "${searchQuery}"` : 'No hay inventario registrado en esta categoría.'}
                     </TableCell>
                   </TableRow>
@@ -159,12 +167,18 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                   const product = item.products as Record<string, unknown> | undefined
                   const productName = (product?.name as string) ?? '—'
                   const productId = item.product_id as string
+                  const rowBranchId = item.branch_id as string
                   const qty = item.quantity as number
                   const price = item.sale_price as number
                   const isLowStock = qty <= 5
 
                   return (
-                    <TableRow key={productId} className="hover:bg-accent/40 transition-colors">
+                    <TableRow key={`${productId}-${rowBranchId}`} className="hover:bg-accent/40 transition-colors">
+                      {allBranches && (
+                        <TableCell className="text-xs text-muted-foreground">
+                          {getBranchName(item) || '—'}
+                        </TableCell>
+                      )}
                       <TableCell className="font-semibold text-sm text-foreground flex items-center gap-2">
                         {isLowStock && <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />}
                         {productName}
@@ -182,7 +196,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                       </TableCell>
                       {showCost && <TableCell className="font-mono text-xs">Bs {Number(product?.cost ?? 0).toFixed(2)}</TableCell>}
                       <TableCell>
-                        {editPrice?.productId === productId ? (
+                        {editPrice?.productId === productId && editPrice?.branchId === rowBranchId ? (
                           <div className="flex items-center gap-1">
                             <span className="text-xs text-muted-foreground">Bs</span>
                             <Input
@@ -191,7 +205,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                               min="0"
                               className="h-7 w-20 text-xs font-mono"
                               value={editPrice.value}
-                              onChange={(e) => setEditPrice({ productId, value: e.target.value })}
+                              onChange={(e) => setEditPrice({ productId, branchId: rowBranchId, value: e.target.value })}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleSavePrice(productId)
                                 if (e.key === 'Escape') setEditPrice(null)
@@ -208,7 +222,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                         ) : (
                           <button
                             className="hover:text-primary transition-colors font-mono text-xs font-semibold cursor-pointer inline-flex items-center gap-1 group"
-                            onClick={() => setEditPrice({ productId, value: String(price) })}
+                            onClick={() => setEditPrice({ productId, branchId: rowBranchId, value: String(price) })}
                             title="Haz clic para editar el precio de venta"
                           >
                             <span>{price > 0 ? `Bs ${Number(price).toFixed(2)}` : <span className="text-muted-foreground italic font-normal">Establecer precio</span>}</span>
@@ -222,7 +236,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                             variant="outline"
                             size="sm"
                             className="h-8 text-xs font-medium border-border/80"
-                            onClick={() => onAdjust(productId, productName, qty, branchId)}
+                            onClick={() => onAdjust(productId, productName, qty, rowBranchId)}
                           >
                             Ajustar Stock
                           </Button>
@@ -250,12 +264,13 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
               const product = item.products as Record<string, unknown> | undefined
               const productName = (product?.name as string) ?? '—'
               const productId = item.product_id as string
+              const rowBranchId = item.branch_id as string
               const qty = item.quantity as number
               const price = item.sale_price as number
               const isLowStock = qty <= 5
 
               return (
-                <div key={productId} className="rounded-xl border border-border/70 bg-card p-4 space-y-3">
+                <div key={`${productId}-${rowBranchId}`} className="rounded-xl border border-border/70 bg-card p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-0.5 min-w-0">
                       <h4 className="font-bold text-sm text-foreground break-words flex items-center gap-1.5">
@@ -263,7 +278,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                         <span>{productName}</span>
                       </h4>
                       <p className="text-[11px] text-muted-foreground">
-                        {((product?.brands as Record<string, unknown> | undefined)?.name as string) ?? '-'} • {((product?.categories as Record<string, unknown> | undefined)?.name as string) ?? '-'}
+                        {allBranches && getBranchName(item) ? `${getBranchName(item)} · ` : ''}{((product?.brands as Record<string, unknown> | undefined)?.name as string) ?? '-'} • {((product?.categories as Record<string, unknown> | undefined)?.name as string) ?? '-'}
                       </p>
                     </div>
                     <Badge variant={isLowStock ? 'destructive' : 'default'} className="font-mono text-xs shrink-0">
@@ -280,7 +295,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                   <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs">
                     <div className="space-y-0.5">
                       <span className="text-[10px] text-muted-foreground block uppercase font-medium">Precio Venta</span>
-                      {editPrice?.productId === productId ? (
+                      {editPrice?.productId === productId && editPrice?.branchId === rowBranchId ? (
                         <div className="flex items-center gap-1 mt-1">
                           <Input
                             type="number"
@@ -288,7 +303,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                             min="0"
                             className="h-8 w-20 text-xs font-mono"
                             value={editPrice.value}
-                            onChange={(e) => setEditPrice({ productId, value: e.target.value })}
+                            onChange={(e) => setEditPrice({ productId, branchId: rowBranchId, value: e.target.value })}
                             autoFocus
                           />
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={() => handleSavePrice(productId)}>
@@ -299,7 +314,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                         <button
                           type="button"
                           className="font-mono font-bold text-sm text-foreground hover:text-primary transition-colors flex items-center gap-1"
-                          onClick={() => setEditPrice({ productId, value: String(price) })}
+                          onClick={() => setEditPrice({ productId, branchId: rowBranchId, value: String(price) })}
                         >
                           <span>{price > 0 ? `Bs ${Number(price).toFixed(2)}` : 'Sin precio'}</span>
                           <Pencil className="h-3 w-3 text-muted-foreground" />
@@ -312,7 +327,7 @@ export function InventoryList({ onAdjust, branchId, brandId, categoryId }: Inven
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs font-medium"
-                        onClick={() => onAdjust(productId, productName, qty, branchId)}
+                        onClick={() => onAdjust(productId, productName, qty, rowBranchId)}
                       >
                         Ajustar Stock
                       </Button>

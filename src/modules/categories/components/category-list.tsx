@@ -69,7 +69,7 @@ export function CategoryList({ brandId, onEdit }: CategoryListProps) {
                 </div>
                 <span className="font-medium text-base">{cat.name}</span>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
                 <Button variant="ghost" size="icon" onClick={() => onEdit(cat.id)}>
                   <Pencil className="h-4 w-4" />
                 </Button>

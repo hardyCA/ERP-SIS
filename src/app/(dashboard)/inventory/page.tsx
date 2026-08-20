@@ -27,7 +27,8 @@ export default function InventoryPage() {
   const urlCategoryId = searchParams.get('category')
 
   const { branchId, setBranch, branches } = useBranch()
-  const effectiveBranchId = urlBranchId || branchId || ''
+  const allBranches = urlBranchId === 'all'
+  const effectiveBranchId = allBranches ? '' : (urlBranchId || branchId || '')
   const effectiveBrandId = urlBrandId || ''
   const effectiveCategoryId = urlCategoryId || ''
 
@@ -62,7 +63,7 @@ export default function InventoryPage() {
   }
 
   useEffect(() => {
-    if (urlBranchId && urlBranchId !== branchId) {
+    if (urlBranchId && urlBranchId !== 'all' && urlBranchId !== branchId) {
       setBranch(urlBranchId)
     }
   }, [urlBranchId, branchId, setBranch])
@@ -90,6 +91,19 @@ export default function InventoryPage() {
             <Store className="h-3.5 w-3.5 text-primary" /> Sucursal:
           </span>
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+            <button
+              type="button"
+              onClick={() => updateFilters('all', effectiveBrandId, effectiveCategoryId)}
+              className={cn(
+                'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap shrink-0 transition-all border',
+                allBranches
+                  ? 'border-primary bg-primary text-primary-foreground shadow-xs font-semibold'
+                  : 'border-border/60 bg-muted/40 hover:bg-accent text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <span>Todas</span>
+              {allBranches && <Check className="h-3 w-3" />}
+            </button>
             {branches.map((b) => (
               <button
                 key={b.id}
@@ -113,7 +127,7 @@ export default function InventoryPage() {
         </div>
 
         {/* 2. Chips de Marcas */}
-        {effectiveBranchId && (
+        {(effectiveBranchId || allBranches) && (
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none border-t border-border/40 pt-2">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider shrink-0 w-20 flex items-center gap-1">
               <Folder className="h-3.5 w-3.5 text-muted-foreground" /> Marcas:
@@ -172,6 +186,7 @@ export default function InventoryPage() {
       {/* Contenido Principal / Tabla de Inventario */}
       <InventoryList
         branchId={effectiveBranchId}
+        allBranches={allBranches}
         brandId={effectiveBrandId}
         categoryId={effectiveCategoryId}
         onAdjust={handleAdjust}
