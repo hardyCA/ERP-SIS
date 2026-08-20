@@ -137,7 +137,7 @@ export default function InventoryPage() {
                 <button
                   key={brand.id}
                   type="button"
-                  onClick={() => updateFilters(effectiveBranchId, brand.id, '')}
+                  onClick={() => updateFilters(allBranches ? 'all' : effectiveBranchId, brand.id, '')}
                   className={cn(
                     'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap shrink-0 transition-all border',
                     brand.id === effectiveBrandId
@@ -165,7 +165,7 @@ export default function InventoryPage() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => updateFilters(effectiveBranchId, effectiveBrandId, cat.id)}
+                  onClick={() => updateFilters(allBranches ? 'all' : effectiveBranchId, effectiveBrandId, cat.id)}
                   className={cn(
                     'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap shrink-0 transition-all border',
                     cat.id === effectiveCategoryId
