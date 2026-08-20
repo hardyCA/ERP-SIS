@@ -14,6 +14,7 @@ async function checkColumns() {
     ['cash_register_movements', 'cash_amount'],
     ['cash_register_movements', 'qr_amount'],
     ['cash_register_movements', 'handler_user_id'],
+    ['cash_register_movements', 'credit_payment_id'],
     ['customers', 'address'],
     ['customers', 'document_id'],
     ['purchases', 'supplier_id'],
@@ -57,6 +58,7 @@ async function checkRpc() {
     ['delete_purchase', { p_purchase_id: dummyId }],
     ['update_purchase', { p_purchase_id: dummyId, p_branch_id: dummyId, p_supplier_id: null, p_notes: 'x', p_items: '[]', p_expenses: '[]' }],
     ['delete_sale', { p_sale_id: dummyId }],
+    ['delete_credit_payment', { p_payment_id: dummyId }],
   ]
   for (const [fn, args] of calls) {
     const { error } = await anon.rpc(fn, args)

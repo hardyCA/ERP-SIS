@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getCredits, registerPayment } from '../actions'
+import { getCredits, registerPayment, deleteCreditPayment } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
+import { useIsAdminOrManager, useCurrentUserId } from '@/shared/lib/use-role'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -25,11 +26,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
-import { DollarSign, ChevronLeft, ChevronRight, WalletMinimal, ScanQrCode, Timer } from 'lucide-react'
+import { DollarSign, ChevronLeft, ChevronRight, WalletMinimal, ScanQrCode, Timer, History, Trash2 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
+import { ConfirmDialog } from '@/shared/components/confirm-dialog'
 
 function getDaysAgo(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })} ${d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}`
 }
 
 function daysBadge(days: number) {
@@ -48,6 +55,10 @@ export function CreditsList() {
   const [submitting, setSubmitting] = useState(false)
   const [activePage, setActivePage] = useState(1)
   const [paidPage, setPaidPage] = useState(1)
+  const [viewCreditId, setViewCreditId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; amount: number } | null>(null)
+  const isAdminOrManager = useIsAdminOrManager()
+  const currentUserId = useCurrentUserId()
 
   const { data, isLoading } = useQuery({
     queryKey: ['credits', branchId],
@@ -75,6 +86,34 @@ export function CreditsList() {
       toast.error(result.message)
     }
   }
+
+  const handleDeletePayment = async () => {
+    if (!deleteTarget) return
+    const fd = new FormData()
+    fd.set('payment_id', deleteTarget.id)
+    const result = await deleteCreditPayment(fd)
+    setDeleteTarget(null)
+    if (result.success) {
+      toast.success('Cobro eliminado correctamente')
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+    } else {
+      toast.error(result.message)
+    }
+  }
+
+  const viewCredit = credits.find((c: Record<string, unknown>) => (c as { id: string }).id === viewCreditId) as
+    | {
+        id: string
+        total: number
+        balance: number
+        sale: { number: number; customer_name?: string }
+        payments: Array<{ id: string; amount: number; payment_type?: string; created_at: string; created_by?: string }>
+      }
+    | undefined
+
+  const viewPayments = viewCredit
+    ? [...(viewCredit.payments ?? [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    : []
 
   if (isLoading) {
     return (
@@ -158,9 +197,14 @@ export function CreditsList() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Button size="sm" onClick={() => { setPayingCreditId(credit.id); setPayAmount(credit.balance.toFixed(2)) }}>
-                              <DollarSign className="h-4 w-4 mr-1" /> Cobrar
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => setViewCreditId(credit.id)}>
+                                <History className="h-4 w-4 mr-1" /> Pagos
+                              </Button>
+                              <Button size="sm" onClick={() => { setPayingCreditId(credit.id); setPayAmount(credit.balance.toFixed(2)) }}>
+                                <DollarSign className="h-4 w-4 mr-1" /> Cobrar
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
@@ -211,7 +255,14 @@ export function CreditsList() {
                         <TableCell className="font-mono">#{String(credit.sale?.number || '').padStart(4, '0')}</TableCell>
                         <TableCell>{credit.sale?.customer_name || '—'}</TableCell>
                         <TableCell className="font-mono">Bs {credit.total.toFixed(2)}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-green-600 border-green-600">Pagado</Badge></TableCell>
+                        <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-green-600 border-green-600">Pagado</Badge>
+                          <Button size="sm" variant="outline" onClick={() => setViewCreditId(credit.id)}>
+                            <History className="h-4 w-4 mr-1" /> Pagos
+                          </Button>
+                        </div>
+                      </TableCell>
                       </TableRow>
                     )
                   })}
@@ -278,6 +329,51 @@ export function CreditsList() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Payment history dialog */}
+      <Dialog open={!!viewCreditId} onOpenChange={(o) => { if (!o) setViewCreditId(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pagos del crédito</DialogTitle>
+            <DialogDescription>
+              {viewCredit ? `Venta #${String(viewCredit.sale?.number || '').padStart(4, '0')} · ${viewCredit.sale?.customer_name || 'Sin cliente'} · Saldo: Bs ${viewCredit.balance.toFixed(2)}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-auto">
+            {viewPayments.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No hay cobros registrados</p>
+            ) : viewPayments.map((p) => {
+              const canDelete = isAdminOrManager || p.created_by === currentUserId
+              return (
+                <div key={p.id} className="flex items-center justify-between rounded-xl border px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold font-mono">Bs {p.amount.toFixed(2)}</p>
+                    <p className="text-[11px] text-muted-foreground">{formatDate(p.created_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline">{p.payment_type === 'qr' ? 'QR' : 'Efectivo'}</Badge>
+                    {canDelete && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        title="Eliminar cobro"
+                        onClick={() => setDeleteTarget({ id: p.id, amount: p.amount })}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        onConfirm={handleDeletePayment}
+        title="Eliminar cobro"
+        description={deleteTarget ? `¿Eliminar el cobro de Bs ${deleteTarget.amount.toFixed(2)}? Se restituirá el saldo del crédito y se revertirá el ingreso en caja.` : ''}
+      />
     </div>
   )
 }

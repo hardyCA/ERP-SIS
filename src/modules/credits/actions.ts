@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/shared/lib/supabase/server'
 
 export type ActionResponse<T = unknown> = {
@@ -92,6 +93,7 @@ export async function registerPayment(formData: FormData): Promise<ActionRespons
         qr_amount: payment_type === 'qr' ? amount : 0,
         reference_type: 'sale',
         reference_id: credit.sale_id,
+        credit_payment_id: payment.id,
         description: `Pago de crédito - Venta #${sale.number}`,
         created_by: user?.id,
         handler_user_id: user?.id,
@@ -99,6 +101,23 @@ export async function registerPayment(formData: FormData): Promise<ActionRespons
     }
 
     return { success: true, data: payment }
+  } catch (e) {
+    return { success: false, message: e instanceof Error ? e.message : 'Error desconocido' }
+  }
+}
+
+export async function deleteCreditPayment(formData: FormData): Promise<ActionResponse> {
+  try {
+    const paymentId = formData.get('payment_id') as string
+    if (!paymentId) return { success: false, message: 'Datos inválidos' }
+
+    const supabase = await createClient()
+    const { error } = await supabase.rpc('delete_credit_payment', { p_payment_id: paymentId })
+    if (error) throw new Error(error.message)
+
+    revalidatePath('/credits')
+    revalidatePath('/cash-register')
+    return { success: true, message: 'Cobro eliminado correctamente' }
   } catch (e) {
     return { success: false, message: e instanceof Error ? e.message : 'Error desconocido' }
   }

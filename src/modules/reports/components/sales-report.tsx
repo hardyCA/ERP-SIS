@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getSalesReport, getSalesSellers } from '../actions'
+import { getSalesReport, getSalesSellers, getTopProducts } from '../actions'
 import { useBranch } from '@/shared/contexts/branch-context'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -108,6 +108,14 @@ export function SalesReport() {
     queryFn: () => getSalesSellers(branchId || undefined),
     staleTime: 60_000,
   })
+
+  const { data: topResult, isLoading: topLoading } = useQuery({
+    queryKey: ['sales-top-products', branchId, filters, sellerId],
+    queryFn: () => getTopProducts(branchId || undefined, filters.dateFrom, filters.dateTo, sellerId === 'all' ? undefined : sellerId),
+    staleTime: 0,
+  })
+
+  const topProducts = (topResult?.success ? topResult.data : []) ?? []
 
   const sellers = (sellersResult?.success ? sellersResult.data : []) ?? []
 
@@ -308,6 +316,31 @@ export function SalesReport() {
                   ))}
                 </tbody>
               </table>
+              <h3>Productos más vendidos</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Producto</th>
+                    <th>Marca</th>
+                    <th>Categoría</th>
+                    <th>Cantidad</th>
+                    <th>Total Bs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topProducts.map((p, i) => (
+                    <tr key={p.product_id}>
+                      <td>{i + 1}</td>
+                      <td>{p.product_name}{p.unit ? ` (${p.unit})` : ''}</td>
+                      <td>{p.brand_name || '—'}</td>
+                      <td>{p.category_name || '—'}</td>
+                      <td>{p.total_quantity}</td>
+                      <td>Bs {p.total_amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             <Table>
             <TableHeader>
@@ -368,6 +401,54 @@ export function SalesReport() {
           </Table>
         </div>
       )}
+
+      {/* Top productos */}
+      <div className="rounded-lg border">
+        <div className="px-4 py-3 border-b">
+          <h3 className="text-sm font-semibold">Productos más vendidos</h3>
+          <p className="text-xs text-muted-foreground">
+            Top {Math.max(topProducts.length, 1)} por cantidad vendida en el periodo
+          </p>
+        </div>
+        {topLoading ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="w-12">#</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead>Marca</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-center">Cantidad</TableHead>
+                <TableHead className="text-right">Total Bs</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {topProducts.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Sin resultados</TableCell>
+                </TableRow>
+              )}
+              {topProducts.map((p, i) => (
+                <TableRow key={p.product_id}>
+                  <TableCell className="font-mono text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="font-medium">
+                    {p.product_name}
+                    {p.unit && <span className="ml-1 font-normal text-[10px] text-muted-foreground">({p.unit})</span>}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.brand_name || '—'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.category_name || '—'}</TableCell>
+                  <TableCell className="text-center font-mono font-semibold">{p.total_quantity}</TableCell>
+                  <TableCell className="text-right font-mono">Bs {p.total_amount.toFixed(2)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </div>
   )
 }

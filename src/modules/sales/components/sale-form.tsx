@@ -476,38 +476,43 @@ export function SaleForm() {
             <div>
               <div className="divide-y">
                 {items.map((item) => (
-                  <div key={item.product_id} className="flex items-center gap-2 py-3">
+                  <div key={item.product_id} className="py-3 sm:flex sm:items-center sm:gap-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       {item.image_url ? (
-                        <Image src={item.image_url} alt={item.product_name} width={36} height={36} className="h-9 w-9 rounded-lg object-cover shrink-0" />
+                        <Image src={item.image_url} alt={item.product_name} width={40} height={40} className="h-10 w-10 rounded-lg object-cover shrink-0" />
                       ) : (
-                        <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                           <Package className="h-4 w-4 text-muted-foreground" />
                         </div>
                       )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{item.product_name}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium leading-snug break-words">{item.product_name}</p>
                         <p className="text-xs text-muted-foreground">Bs {item.price.toFixed(2)} c/u{item.unit ? ` (${item.unit})` : ''}</p>
                       </div>
+                      <div className="text-right shrink-0 sm:hidden">
+                        <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.price).toFixed(2)}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
-                        onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="text-sm font-mono w-7 text-center tabular-nums font-medium">{item.quantity}</span>
-                      <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
-                        onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
+                    <div className="mt-2 flex items-center justify-between gap-2 sm:mt-0">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
+                          onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}>
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="text-sm font-mono w-7 text-center tabular-nums font-medium">{item.quantity}</span>
+                        <button type="button" className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-accent transition-colors"
+                          onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}>
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="hidden sm:block text-right min-w-[70px] shrink-0">
+                        <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.price).toFixed(2)}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => removeItem(item.product_id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div className="text-right min-w-[70px] shrink-0">
-                      <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.price).toFixed(2)}</p>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
-                      onClick={() => removeItem(item.product_id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
                 ))}
               </div>

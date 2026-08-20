@@ -29,6 +29,32 @@ export function useIsAdmin() {
   return isAdmin
 }
 
+export function useIsAdminOrManager() {
+  const [allowed, setAllowed] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setAllowed(false); return }
+
+      if (user.email === 'admin@gmail.com') {
+        setAllowed(true)
+        return
+      }
+
+      const { data: roles } = await supabase
+        .from('user_branches')
+        .select('role')
+        .eq('user_id', user.id)
+
+      setAllowed(!!roles?.some(r => r.role === 'admin' || r.role === 'manager'))
+    })()
+  }, [])
+
+  return allowed
+}
+
 export function useShowCost() {
   return useIsAdmin()
 }

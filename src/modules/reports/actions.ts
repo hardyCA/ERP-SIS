@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/shared/lib/supabase/server'
-import type { ActionResponse, DashboardStats, SalesReportItem, InventoryReportItem, CashReportItem, CreditReportItem, ProfitReportItem, PurchaseStats, PurchaseReportItem } from './types'
+import type { ActionResponse, DashboardStats, SalesReportItem, TopProductItem, InventoryReportItem, CashReportItem, CreditReportItem, ProfitReportItem, PurchaseStats, PurchaseReportItem } from './types'
 
 export async function getWeeklySalesChart(branchId?: string): Promise<ActionResponse<Array<{ day: string; amount: number; count: number }>>> {
   try {
@@ -203,6 +203,62 @@ export async function getSalesReport(branchId?: string, dateFrom?: string, dateT
     }))
 
     return { success: true, message: '', data: enriched as SalesReportItem[] }
+  } catch (e) {
+    return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
+  }
+}
+
+export async function getTopProducts(branchId?: string, dateFrom?: string, dateTo?: string, sellerId?: string, limit = 10): Promise<ActionResponse<TopProductItem[]>> {
+  try {
+    const supabase = await createClient()
+    let query = supabase
+      .from('sale_items')
+      .select('product_id, quantity, subtotal, sales!inner(created_at, branch_id, created_by, deleted_at), products(name, brands(name), categories(name), units_of_measure(name, abbreviation), image_url)')
+      .is('sales.deleted_at', null)
+
+    if (branchId) query = query.eq('sales.branch_id', branchId)
+    if (dateFrom) query = query.gte('sales.created_at', dateFrom)
+    if (dateTo) query = query.lte('sales.created_at', dateTo)
+    if (sellerId) query = query.eq('sales.created_by', sellerId)
+
+    const { data, error: queryErr } = await query
+    if (queryErr) { throw new TypeError(queryErr.message) }
+
+    const agg = new Map<string, TopProductItem>()
+
+    for (const si of data ?? []) {
+      const rawProduct = si.products as Record<string, unknown> | Array<Record<string, unknown>> | undefined
+      const product = Array.isArray(rawProduct) ? rawProduct[0] : rawProduct
+      if (!product) continue
+      const pid = si.product_id as string
+      const qty = Number(si.quantity) || 0
+      const amount = Number(si.subtotal) || 0
+
+      const unit = (product.units_of_measure as Record<string, unknown> | undefined) ?? null
+      const existing = agg.get(pid)
+      if (existing) {
+        existing.total_quantity += qty
+        existing.total_amount += amount
+      } else {
+        agg.set(pid, {
+          product_id: pid,
+          product_name: (product.name as string) ?? '—',
+          brand_name: ((product.brands as Record<string, unknown> | undefined)?.name as string) ?? '',
+          category_name: ((product.categories as Record<string, unknown> | undefined)?.name as string) ?? '',
+          unit: unit ? (unit.abbreviation as string | null) ?? (unit.name as string) : null,
+          image_url: (product.image_url as string | null) ?? null,
+          total_quantity: qty,
+          total_amount: amount,
+        })
+      }
+    }
+
+    const top = Array.from(agg.values())
+      .map(p => ({ ...p, total_quantity: Math.round(p.total_quantity * 100) / 100, total_amount: Math.round(p.total_amount * 100) / 100 }))
+      .sort((a, b) => b.total_quantity - a.total_quantity || b.total_amount - a.total_amount)
+      .slice(0, limit)
+
+    return { success: true, message: '', data: top }
   } catch (e) {
     return { success: false, message: (e instanceof Error ? e.message : 'Error desconocido') }
   }

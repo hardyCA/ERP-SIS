@@ -135,6 +135,7 @@ export interface CashRegisterMovements {
   amount: number
   reference_type?: string
   reference_id?: string
+  credit_payment_id?: string
   description?: string
   created_by?: string
   handler_user_id?: string

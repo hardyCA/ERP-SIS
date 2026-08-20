@@ -25,6 +25,17 @@ export interface SalesReportItem {
   branches: { name: string } | null
 }
 
+export interface TopProductItem {
+  product_id: string
+  product_name: string
+  brand_name: string
+  category_name: string
+  unit: string | null
+  image_url: string | null
+  total_quantity: number
+  total_amount: number
+}
+
 export interface InventoryReportItem {
   product_id: string
   product_name: string
