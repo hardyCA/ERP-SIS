@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { CalendarDays, CalendarRange, Calendar, FileSpreadsheet, FileText, Printer, UserCircle } from 'lucide-react'
-import { exportToExcel, exportToPdf, printElement } from '@/shared/lib/export'
+import { exportToExcel, exportToPdf, exportSalesReportPdf, printElement } from '@/shared/lib/export'
 
 type Period = 'day' | 'month' | 'year' | 'custom'
 
@@ -136,42 +136,36 @@ export function SalesReport() {
     credit: 'pending',
   }
 
-  const totalDescuento = sales.reduce((sum, s) => sum + s.discount, 0)
+  const totalDescuento = sales.reduce((sum, s) => sum + Number(s.discount || 0), 0)
   const subtotal = totalAmount + totalDescuento
 
   const sellerName = sellerId === 'all' ? 'Todos' : (sellers.find(s => s.id === sellerId)?.name ?? '')
   const subtitle = `Desde ${new Date(filters.dateFrom).toLocaleDateString('es-MX')} hasta ${new Date(filters.dateTo).toLocaleDateString('es-MX')} · Vendedor: ${sellerName}`
 
-  const exportSalesPdf = () => {
-    exportToPdf(
-      'Reporte de Ventas',
+  const exportSalesPdf = async () => {
+    await exportSalesReportPdf({
+      title: 'Reporte de Ventas',
       subtitle,
-      [
-        { header: '#', dataKey: '#' },
-        { header: 'Vendedor', dataKey: 'Vendedor' },
-        { header: 'Sucursal', dataKey: 'Sucursal' },
-        { header: 'Cliente', dataKey: 'Cliente' },
-        { header: 'Total', dataKey: 'Total' },
-        { header: 'Tipo Pago', dataKey: 'Tipo Pago' },
-        { header: 'Fecha', dataKey: 'Fecha' },
-      ],
-      sales.map((s) => ({
-        '#': `#${s.number.toString().padStart(4, '0')}`,
-        Vendedor: s.created_by_name ?? '—',
-        Sucursal: s.branches?.name ?? '—',
-        Cliente: s.customer_name ?? '—',
-        Total: s.total.toFixed(2),
-        'Tipo Pago': paymentLabels[s.payment_type] ?? s.payment_type,
-        Fecha: new Date(s.created_at).toLocaleDateString('es-MX'),
+      sales: sales.map((s) => ({
+        number: s.number,
+        created_by_name: s.created_by_name,
+        branch_name: s.branches?.name,
+        customer_name: s.customer_name,
+        total: s.total,
+        payment_type: s.payment_type,
+        created_at: s.created_at,
+        discount: s.discount,
       })),
-      [
-        { label: 'Ventas', value: sales.length.toString() },
-        { label: 'Subtotal', value: `Bs ${subtotal.toFixed(2)}` },
-        { label: 'Descuentos', value: `Bs ${totalDescuento.toFixed(2)}` },
-        { label: 'Total neto', value: `Bs ${totalAmount.toFixed(2)}` },
-      ],
-      `reporte-ventas-${dateFrom}-${dateTo}`
-    )
+      topProducts: topProducts.map((p) => ({
+        product_name: p.product_name,
+        brand_name: p.brand_name,
+        category_name: p.category_name,
+        unit: p.unit,
+        total_quantity: p.total_quantity,
+        total_amount: p.total_amount,
+      })),
+      filename: `reporte-ventas-${dateFrom}-${dateTo}`,
+    })
   }
 
   return (

@@ -60,6 +60,218 @@ export function exportToPdf(
   doc.save(`${filename}.pdf`)
 }
 
+interface SalesReportPdfData {
+  title: string
+  subtitle: string
+  sales: Array<{
+    number: number
+    created_by_name: string | null
+    branch_name: string | null
+    customer_name: string | null
+    total: number
+    payment_type: string
+    created_at: string
+    discount: number
+  }>
+  topProducts: Array<{
+    product_name: string
+    brand_name: string
+    category_name: string
+    unit: string | null
+    total_quantity: number
+    total_amount: number
+  }>
+  filename: string
+}
+
+export async function exportSalesReportPdf(data: SalesReportPdfData) {
+  const [gaciaLogo] = await Promise.all([loadPublicImage('/LOGO GACIA.png')])
+
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pw = doc.internal.pageSize.getWidth()
+  const ph = doc.internal.pageSize.getHeight()
+  const ml = 14
+  const mr = 14
+  const rightX = pw - mr
+
+  doc.setFont('helvetica', 'normal')
+
+  function setBold() { doc.setFont('helvetica', 'bold') }
+  function setNormal() { doc.setFont('helvetica', 'normal') }
+
+  // === HEADER ===
+  const logoY = 14
+
+  // IZQUIERDA: logo GACIA
+  if (gaciaLogo) {
+    const gacia = scaleImage(gaciaLogo, 34, 18)
+    doc.addImage(gaciaLogo.dataUrl, 'PNG', ml, logoY - 1, gacia.w, gacia.h)
+  }
+
+  // CENTRO: Título
+  doc.setFontSize(16)
+  setBold()
+  doc.setTextColor(0)
+  doc.text(data.title, pw / 2, logoY + 5, { align: 'center' })
+  setNormal()
+  doc.setFontSize(9)
+  doc.setTextColor(80)
+  doc.text(data.subtitle, pw / 2, logoY + 10, { align: 'center' })
+
+  // DERECHA: fecha reporte
+  const blockW = 52
+  const blockX = rightX - blockW
+  doc.setFontSize(6)
+  doc.setTextColor(120)
+  doc.text('REPORTE', blockX + blockW / 2, logoY + 0.5, { align: 'center' })
+  doc.setFontSize(7)
+  setBold()
+  doc.setTextColor(0)
+  doc.text(new Date().toLocaleDateString('es-MX'), blockX + blockW / 2, logoY + 5, { align: 'center' })
+
+  // === CALCULATIONS ===
+  const totalVentas = data.sales.length
+  const totalDescuento = data.sales.reduce((sum, s) => sum + Number(s.discount || 0), 0)
+  const totalNeto = data.sales.reduce((sum, s) => sum + Number(s.total || 0), 0)
+  const subtotal = totalNeto + totalDescuento
+
+  const paymentLabels: Record<string, string> = {
+    cash: 'Efectivo',
+    qr: 'QR / Transf.',
+    mixed: 'Mixto',
+    credit: 'Crédito',
+  }
+
+  // === SUMMARY ===
+  let y = logoY + 18
+  doc.setFontSize(9)
+  setBold()
+  doc.setTextColor(0)
+  doc.text('RESUMEN', ml, y)
+  y += 6
+  setNormal()
+
+  const summaryItems = [
+    { label: 'Ventas', value: totalVentas.toString() },
+    { label: 'Subtotal', value: `Bs ${subtotal.toFixed(2)}` },
+    { label: 'Descuentos', value: `Bs ${totalDescuento.toFixed(2)}` },
+    { label: 'Total neto', value: `Bs ${totalNeto.toFixed(2)}` },
+  ]
+
+  summaryItems.forEach((s) => {
+    doc.setFontSize(8.5)
+    doc.setTextColor(80)
+    doc.text(`${s.label}:`, ml, y)
+    doc.setTextColor(0)
+    setBold()
+    doc.text(s.value, ml + 35, y)
+    setNormal()
+    y += 5
+  })
+
+  y += 3
+
+  // === SALES TABLE ===
+  const salesColumns = [
+    { header: '#', dataKey: 'num' },
+    { header: 'Vendedor', dataKey: 'vendedor' },
+    { header: 'Sucursal', dataKey: 'sucursal' },
+    { header: 'Cliente', dataKey: 'cliente' },
+    { header: 'Total', dataKey: 'total' },
+    { header: 'Desc.', dataKey: 'descuento' },
+    { header: 'Tipo Pago', dataKey: 'pago' },
+    { header: 'Fecha', dataKey: 'fecha' },
+  ]
+
+  const salesRows = data.sales.map((s, i) => ({
+    num: `#${s.number.toString().padStart(4, '0')}`,
+    vendedor: s.created_by_name ?? '—',
+    sucursal: s.branch_name ?? '—',
+    cliente: s.customer_name ?? '—',
+    total: `Bs ${Number(s.total).toFixed(2)}`,
+    descuento: Number(s.discount) > 0 ? `Bs ${Number(s.discount).toFixed(2)}` : '—',
+    pago: paymentLabels[s.payment_type] ?? s.payment_type,
+    fecha: new Date(s.created_at).toLocaleDateString('es-MX'),
+  }))
+
+  autoTable(doc, {
+    startY: y,
+    head: [salesColumns.map((c) => c.header)],
+    body: salesRows.map((r) => salesColumns.map((c) => r[c.dataKey] ?? '')),
+    styles: { fontSize: 7.5, cellPadding: 2 },
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7.5, fontStyle: 'bold', halign: 'center' },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 14 },
+      4: { halign: 'right', cellWidth: 22 },
+      5: { halign: 'right', cellWidth: 20 },
+      6: { halign: 'center', cellWidth: 22 },
+      7: { halign: 'center', cellWidth: 22 },
+    },
+  })
+
+  let afterSales = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 5
+
+  // Check if we need a new page for top products
+  const topProductsHeight = 10 + (data.topProducts.length + 1) * 6
+  if (afterSales + topProductsHeight > ph - 20) {
+    doc.addPage()
+    afterSales = 20
+  }
+
+  // === TOP PRODUCTS TABLE ===
+  if (data.topProducts.length > 0) {
+    doc.setFontSize(10)
+    setBold()
+    doc.setTextColor(0)
+    doc.text('Productos más vendidos', ml, afterSales)
+    afterSales += 6
+    setNormal()
+
+    const topColumns = [
+      { header: '#', dataKey: 'num' },
+      { header: 'Producto', dataKey: 'producto' },
+      { header: 'Marca', dataKey: 'marca' },
+      { header: 'Categoría', dataKey: 'categoria' },
+      { header: 'Cant.', dataKey: 'cantidad' },
+      { header: 'Total Bs', dataKey: 'total' },
+    ]
+
+    const topRows = data.topProducts.map((p, i) => ({
+      num: (i + 1).toString(),
+      producto: p.product_name + (p.unit ? ` (${p.unit})` : ''),
+      marca: p.brand_name || '—',
+      categoria: p.category_name || '—',
+      cantidad: Math.round(p.total_quantity).toString(),
+      total: `Bs ${p.total_amount.toFixed(2)}`,
+    }))
+
+    autoTable(doc, {
+      startY: afterSales,
+      head: [topColumns.map((c) => c.header)],
+      body: topRows.map((r) => topColumns.map((c) => r[c.dataKey] ?? '')),
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 7.5, fontStyle: 'bold', halign: 'center' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 10 },
+        4: { halign: 'center', cellWidth: 18 },
+        5: { halign: 'right', cellWidth: 25 },
+      },
+    })
+
+    afterSales = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+  }
+
+  // === FOOTER ===
+  doc.setFontSize(7)
+  doc.setTextColor(120)
+  doc.text('SIIM - Sistema Integral de Inventarios', pw / 2, ph - 8, { align: 'center' })
+  doc.text(`Generado: ${new Date().toLocaleString('es-MX')}`, pw / 2, ph - 4, { align: 'center' })
+
+  doc.save(`${data.filename}.pdf`)
+}
+
 export function printElement(elementId: string) {
   const el = document.getElementById(elementId)
   if (!el) return

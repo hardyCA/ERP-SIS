@@ -194,6 +194,7 @@ export async function getSalesReport(branchId?: string, dateFrom?: string, dateT
       id: s.id,
       number: s.number,
       total: Number(s.total),
+      discount: Number(s.discount ?? 0),
       payment_type: s.payment_type,
       customer_name: s.customer_name,
       created_at: s.created_at,
