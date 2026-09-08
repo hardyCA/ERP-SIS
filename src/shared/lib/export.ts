@@ -51,7 +51,7 @@ export function exportToPdf(
   autoTable(doc, {
     startY: y,
     head: [columns.map((c) => c.header)],
-    body: rows.map((r) => columns.map((c) => r[c.dataKey] ?? '')),
+    body: rows.map((r) => columns.map((c) => (r as Record<string, string>)[c.dataKey] ?? '')),
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 8, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 247, 250] },
@@ -197,7 +197,7 @@ export async function exportSalesReportPdf(data: SalesReportPdfData) {
   autoTable(doc, {
     startY: y,
     head: [salesColumns.map((c) => c.header)],
-    body: salesRows.map((r) => salesColumns.map((c) => r[c.dataKey] ?? '')),
+    body: salesRows.map((r) => salesColumns.map((c) => (r as Record<string, string>)[c.dataKey] ?? '')),
     styles: { fontSize: 7.5, cellPadding: 2 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7.5, fontStyle: 'bold', halign: 'center' },
     alternateRowStyles: { fillColor: [245, 247, 250] },
@@ -249,7 +249,7 @@ export async function exportSalesReportPdf(data: SalesReportPdfData) {
     autoTable(doc, {
       startY: afterSales,
       head: [topColumns.map((c) => c.header)],
-      body: topRows.map((r) => topColumns.map((c) => r[c.dataKey] ?? '')),
+      body: topRows.map((r) => topColumns.map((c) => (r as Record<string, string>)[c.dataKey] ?? '')),
       styles: { fontSize: 7.5, cellPadding: 2 },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 7.5, fontStyle: 'bold', halign: 'center' },
       alternateRowStyles: { fillColor: [245, 247, 250] },

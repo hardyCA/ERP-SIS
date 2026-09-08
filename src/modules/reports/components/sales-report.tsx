@@ -149,7 +149,7 @@ export function SalesReport() {
       sales: sales.map((s) => ({
         number: s.number,
         created_by_name: s.created_by_name,
-        branch_name: s.branches?.name,
+        branch_name: s.branches?.name ?? null,
         customer_name: s.customer_name,
         total: s.total,
         payment_type: s.payment_type,
