@@ -17,10 +17,12 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useShowCost } from '@/shared/lib/use-role'
-import { Package, Send, Check, X, ArrowLeft } from 'lucide-react'
+import { Package, Send, Check, X, ArrowLeft, Printer } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ConfirmDialog } from '@/shared/components/confirm-dialog'
+import { Switch } from '@/shared/components/ui/switch'
+import { exportTransferPdf } from '@/shared/lib/export'
 
 const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pending: { label: 'Pendiente', variant: 'secondary' },
@@ -36,7 +38,8 @@ interface TransferDetailProps {
 export function TransferDetail({ transferId }: TransferDetailProps) {
   const queryClient = useQueryClient()
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
-  const showCost = useShowCost()
+  const isAdmin = useShowCost()
+  const [showCost, setShowCost] = useState(true)
 
   const { data: result, isLoading } = useQuery({
     queryKey: ['transfer', transferId],
@@ -102,7 +105,66 @@ export function TransferDetail({ transferId }: TransferDetailProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Traspaso #{((transfer.number as number)?.toString().padStart(4, '0')) ?? (transfer.id as string).slice(0, 8)}</CardTitle>
-            <Badge variant={statusInfo.variant} className="text-sm px-3 py-1">{statusInfo.label}</Badge>
+            <div className="flex items-center gap-3">
+              {isAdmin && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Switch
+                    checked={showCost}
+                    onCheckedChange={setShowCost}
+                    className="h-4 w-7"
+                  />
+                  <span>Costos</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const res = await getTransferById(transferId)
+                  if (!res.success) {
+                    toast.error(res.message)
+                    return
+                  }
+                  const t = res.data as Record<string, unknown>
+                  const items = (t.items ?? []) as Array<{ quantity: number; unit_cost: number; products: { name: string | null; units_of_measure: { name: string; abbreviation: string | null } | null } | null }>
+                  const statusLabel: Record<string, string> = {
+                    pending: 'Pendiente',
+                    sent: 'Enviado',
+                    received: 'Recibido',
+                    cancelled: 'Cancelado',
+                  }
+                  const from = (t.from_branch as Record<string, unknown>) ?? {}
+                  const to = (t.to_branch as Record<string, unknown>) ?? {}
+                  await exportTransferPdf({
+                    number: (t.number as number)?.toString().padStart(4, '0') ?? transferId.slice(0, 8),
+                    date: new Date(t.created_at as string).toLocaleString(),
+                    fromBranch: (from.name as string) ?? '—',
+                    fromBranchAddress: (from.address as string) ?? '',
+                    fromBranchPhone: (from.phone as string) ?? '',
+                    toBranch: (to.name as string) ?? '—',
+                    toBranchAddress: (to.address as string) ?? '',
+                    toBranchPhone: (to.phone as string) ?? '',
+                    createdBy: (t.created_by_name as string) ?? '—',
+                    sentBy: (t.sent_by_name as string) ?? '—',
+                    receivedBy: (t.received_by_name as string) ?? '—',
+                    statusLabel: statusLabel[t.status as string] ?? (t.status as string),
+                    notes: (t.notes as string) ?? null,
+                    items: items.map(i => {
+                      const p = i.products
+                      return {
+                        product_name: p?.name ?? '—',
+                        unit: p?.units_of_measure?.abbreviation ?? null,
+                        quantity: Number(i.quantity),
+                        unit_cost: Number(i.unit_cost),
+                      }
+                    }),
+                  }, showCost)
+                }}
+              >
+                <Printer className="h-4 w-4" /> PDF
+              </Button>
+              <Badge variant={statusInfo.variant} className="text-sm px-3 py-1">{statusInfo.label}</Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">

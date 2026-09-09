@@ -24,6 +24,7 @@ import { ConfirmDialog } from '@/shared/components/confirm-dialog'
 import { useShowCost } from '@/shared/lib/use-role'
 import { exportTransferPdf, exportToPdf, printElement } from '@/shared/lib/export'
 import { cn } from '@/shared/lib/utils'
+import { Switch } from '@/shared/components/ui/switch'
 
 const PAGE_SIZE = 15
 
@@ -50,7 +51,8 @@ const statusLabels: Record<string, { label: string; variant: 'default' | 'second
 export function TransferList() {
   const queryClient = useQueryClient()
   const { branchId } = useBranch()
-  const showCost = useShowCost()
+  const isAdmin = useShowCost()
+  const [showCost, setShowCost] = useState(true)
   const [page, setPage] = useState(1)
   const [cancelTarget, setCancelTarget] = useState<string | null>(null)
   const [period, setPeriod] = useState<Period | 'all'>('all')
@@ -178,7 +180,17 @@ export function TransferList() {
                   </button>
                 ))}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {isAdmin && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Switch
+                    checked={showCost}
+                    onCheckedChange={setShowCost}
+                    className="h-4 w-7"
+                  />
+                  <span>Costos</span>
+                </div>
+              )}
               <Button variant="outline" size="sm" className="h-7 text-[11px]"
                 onClick={() => {
                   exportToPdf(
