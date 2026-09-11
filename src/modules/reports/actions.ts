@@ -103,7 +103,7 @@ export async function getDashboardStats(branchId?: string): Promise<ActionRespon
 
     const { data: movements } = await cashQuery
     const cashBalance = (movements ?? []).reduce((sum, m) => {
-      if (m.type === 'cash_sale' || m.type === 'credit_payment' || m.type === 'manual_income') {
+      if (m.type === 'cash_sale' || m.type === 'credit_payment' || m.type === 'manual_income' || m.type === 'cash_transfer_in') {
         return sum + Number(m.amount)
       }
       return sum - Number(m.amount)

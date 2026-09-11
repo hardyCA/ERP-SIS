@@ -24,6 +24,8 @@ const typeLabels: Record<string, { label: string; variant: 'default' | 'secondar
   manual_income: { label: 'Ingreso Manual', variant: 'outline' },
   manual_expense: { label: 'Gasto Manual', variant: 'destructive' },
   owner_withdrawal: { label: 'Retiro Propietario', variant: 'destructive' },
+  cash_transfer_in: { label: 'Transferencia Recibida', variant: 'default' },
+  cash_transfer_out: { label: 'Transferencia Enviada', variant: 'destructive' },
 }
 
 export function CashReport() {
@@ -40,7 +42,7 @@ export function CashReport() {
 
   const movements = (result?.success ? result.data : []) ?? []
 
-  const positiveTypes = new Set(['cash_sale', 'credit_payment', 'manual_income'])
+  const positiveTypes = new Set(['cash_sale', 'credit_payment', 'manual_income', 'cash_transfer_in'])
   const balance = movements.reduce((acc, m) => positiveTypes.has(m.type) ? acc + m.amount : acc - m.amount, 0)
 
   return (
