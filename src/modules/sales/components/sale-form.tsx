@@ -52,6 +52,8 @@ export function SaleForm() {
   const [submitting, setSubmitting] = useState(false)
   const [items, setItems] = useState<LineItem[]>([])
   const [pendingQty, setPendingQty] = useState<Record<string, string>>({})
+  const [pendingPrice, setPendingPrice] = useState<Record<string, string>>({})
+  const [cartPrice, setCartPrice] = useState<Record<string, string>>({})
 
   // Hierarchy
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null)
@@ -126,20 +128,27 @@ export function SaleForm() {
 
   const products = allProducts.filter(p => p.stock > 0 && !items.some(i => i.product_id === p.id))
 
-  const addItem = useCallback((product: ProductToAdd, qtyStr: string) => {
+  const addItem = useCallback((product: ProductToAdd, qtyStr: string, priceStr?: string) => {
     const qty = parseInt(qtyStr) || 0
     if (qty < 1) { toast.error('La cantidad debe ser mayor a 0'); return }
     if (qty > product.stock) { toast.error(`Stock insuficiente. Disponible: ${product.stock}`); return }
+    let price = product.sale_price
+    if (priceStr !== undefined && priceStr.trim() !== '') {
+      const parsed = parseFloat(priceStr)
+      if (isNaN(parsed) || parsed < 0) { toast.error('Ingresa un precio válido'); return }
+      price = parsed
+    }
     setItems(prev => [...prev, {
       product_id: product.id,
       product_name: product.name,
       image_url: product.image_url,
       quantity: qty,
-      price: product.sale_price,
+      price,
       stock: product.stock,
       unit: product.unit,
     }])
     setPendingQty(prev => { const n = { ...prev }; delete n[product.id]; return n })
+    setPendingPrice(prev => { const n = { ...prev }; delete n[product.id]; return n })
     toast.success(`${product.name} agregado`)
   }, [])
 
@@ -319,6 +328,7 @@ export function SaleForm() {
                 <div className="divide-y">
                   {products.map((product) => {
                     const qtyStr = pendingQty[product.id] ?? '1'
+                    const priceStr = pendingPrice[product.id] ?? (product.sale_price > 0 ? product.sale_price.toFixed(2) : '')
                     return (
                       <div key={product.id} className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-2 sm:py-1.5 hover:bg-accent/30 transition-colors">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -337,10 +347,6 @@ export function SaleForm() {
                               {product.unit && <span className="ml-1 font-normal text-[10px] text-muted-foreground">({product.unit})</span>}
                             </p>
                             <div className="flex items-center gap-2 sm:hidden text-[11px] text-muted-foreground mt-0.5">
-                              <span className="font-mono font-medium text-foreground">
-                                {product.sale_price > 0 ? `Bs ${product.sale_price.toFixed(2)}` : '—'}
-                              </span>
-                              <span>•</span>
                               <span className={cn(product.stock <= 3 ? 'text-destructive font-semibold' : '')}>
                                 Stock: {product.stock}
                               </span>
@@ -348,26 +354,38 @@ export function SaleForm() {
                           </div>
                         </div>
 
-                        {/* Desktop price & stock info */}
-                        <p className="hidden sm:block w-20 shrink-0 text-[11px] font-mono text-right text-muted-foreground">
-                          {product.sale_price > 0 ? `Bs ${product.sale_price.toFixed(2)}` : '—'}
-                        </p>
+                        {/* Desktop price input & stock info */}
+                        <Input type="text" inputMode="decimal"
+                          value={priceStr}
+                          onChange={(e) => setPendingPrice(prev => ({ ...prev, [product.id]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') addItem(product, qtyStr, priceStr) }}
+                          placeholder="0.00"
+                          className="hidden sm:block h-7 w-20 shrink-0 text-[11px] font-mono text-right" />
                         <p className={cn('hidden sm:block w-12 shrink-0 text-[11px] font-mono text-center', product.stock <= 3 ? 'text-destructive font-medium' : 'text-muted-foreground')}>
                           {product.stock}
                         </p>
 
                         {/* Action controls */}
-                        <div className="flex items-center justify-end gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                        <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                          <div className="flex items-center gap-1.5 sm:hidden">
+                            <span className="text-[10px] text-muted-foreground">Precio:</span>
+                            <Input type="text" inputMode="decimal"
+                              value={priceStr}
+                              onChange={(e) => setPendingPrice(prev => ({ ...prev, [product.id]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === 'Enter') addItem(product, qtyStr, priceStr) }}
+                              placeholder="0.00"
+                              className="h-8 text-xs font-mono w-20" />
+                          </div>
                           <div className="flex items-center gap-1.5 sm:w-16 shrink-0">
                             <span className="text-[10px] text-muted-foreground sm:hidden">Cant:</span>
                             <Input type="text" inputMode="numeric"
                               value={qtyStr}
                               onChange={(e) => setPendingQty(prev => ({ ...prev, [product.id]: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === 'Enter') addItem(product, qtyStr) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') addItem(product, qtyStr, priceStr) }}
                               className="h-8 sm:h-7 text-xs sm:text-[11px] font-mono text-center w-14 sm:w-full" />
                           </div>
                           <Button size="sm" className="h-8 sm:h-7 text-xs sm:text-[11px] px-3 sm:px-2.5 shrink-0"
-                            onClick={() => addItem(product, qtyStr)}>
+                            onClick={() => addItem(product, qtyStr, priceStr)}>
                             <Plus className="h-3.5 w-3.5 sm:h-3 sm:w-3 mr-1 sm:mr-0.5" /> Agregar
                           </Button>
                         </div>
@@ -487,7 +505,20 @@ export function SaleForm() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium leading-snug break-words">{item.product_name}</p>
-                        <p className="text-xs text-muted-foreground">Bs {item.price.toFixed(2)} c/u{item.unit ? ` (${item.unit})` : ''}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-xs text-muted-foreground">Bs</span>
+                          <Input type="text" inputMode="decimal"
+                            value={cartPrice[item.product_id] ?? item.price.toFixed(2)}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              setCartPrice(prev => ({ ...prev, [item.product_id]: v }))
+                              const n = parseFloat(v)
+                              if (!isNaN(n) && n >= 0) updateItem(item.product_id, 'price', n)
+                            }}
+                            onBlur={() => setCartPrice(prev => { const n = { ...prev }; delete n[item.product_id]; return n })}
+                            className="h-7 w-20 text-xs font-mono" />
+                          <span className="text-xs text-muted-foreground">c/u{item.unit ? ` (${item.unit})` : ''}</span>
+                        </div>
                       </div>
                       <div className="text-right shrink-0 sm:hidden">
                         <p className="text-sm font-semibold font-mono">Bs {(item.quantity * item.price).toFixed(2)}</p>
